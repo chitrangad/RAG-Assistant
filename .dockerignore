@@ -1,0 +1,38 @@
+# Never ship local data (SQLite catalog, ChromaDB, credentials, uploads)
+data/
+
+# Local environment
+.venv/
+.env
+
+# Git / CI
+.git/
+.github/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Local docs packs / scratch
+*.zip
+*.log
+*.db
+
+# Browser extension is a separate deliverable — not needed in the image
+extension/
+sample_docs/
+
+# Docs / scratch not needed at runtime
+tests/
+PROGRESS.md
+specs.md
+prompt.txt
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

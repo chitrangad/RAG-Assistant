@@ -219,18 +219,50 @@ zip -r ../rag-extension.zip . -x "icons/icon*.png"
 
 ---
 
-## 7. Roadmap — Docker Deployment (Next Version)
+## 7. Docker Deployment
 
-A future release will ship containerized deployment:
+Containerized deployment is supported: **`Dockerfile`** + **`docker-compose.yml`** in the repo root.
 
-- **`Dockerfile`** — pre-built image containing Python deps, the embedding model (pre-cached at build time), and the app.
-- **`docker-compose.yml`** — services for the backend, a persisted `data/` volume (SQLite + ChromaDB), and port mapping.
-- Benefits: reproducible installs, no Python/venv management on the target machine, easier server/hosted deployment.
+The image:
+- Installs the CPU-only PyTorch build (keeps the image lean — no multi-GB CUDA deps)
+- **Pre-caches the embedding model (`all-MiniLM-L6-v2`) at build time** — the container ingests and queries fully offline
+- Persists everything in the bind-mounted `./data` directory (SQLite catalog + ChromaDB + uploads)
 
-Planned shape (subject to change):
+### 7.1 Build & run
+
+> **Requires Docker with the Compose v2 plugin (`docker compose`).** The legacy standalone `docker-compose` v1 is not supported.
+
+```bash
+cd RAG-Assistant
+cp -r <your existing data> ./data    # optional: migrate an existing install's data/
+docker compose up -d --build
+```
+
+- Query page: `http://127.0.0.1:8000`
+- Admin: `http://127.0.0.1:8000/admin`
+- Logs: `docker compose logs -f` · Stop: `docker compose down` (data is kept in `./data`)
+
+> The container runs as **root** so the host-mounted `./data` is always writable regardless of host UID (see the Dockerfile comment for a stricter non-root option).
+
+### 7.2 Fresh start
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+### 7.3 Manual build (no compose)
+
+```bash
+docker build -t rag-assistant:latest .
+docker run -p 8000:8000 -v "$PWD/data:/app/data" rag-assistant:latest
+```
+
+### 7.4 Roadmap — pre-built image on a registry
+
+A future release will publish a **pre-built image** (e.g. `ghcr.io/chitrangad/rag-assistant:latest`) so deployments skip the local build entirely:
 
 ```yaml
-# docker-compose.yml (NEXT VERSION)
 services:
   rag-assistant:
     image: ghcr.io/chitrangad/rag-assistant:latest
@@ -243,6 +275,8 @@ services:
       - PORT=8000
     restart: unless-stopped
 ```
+
+Benefits: reproducible installs, no Python/venv management on the target machine, easier server/hosted deployment.
 
 ---
 
