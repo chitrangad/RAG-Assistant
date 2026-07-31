@@ -1,8 +1,56 @@
 # Progress Checkpoint — Project Knowledge Assistant
 
-**Date:** 2026-07-31 (evening session)
-**Status:** ✅ 36/36 tests passing. ✅ Ingestion + Query working. ✅ Upload link removed from query page. ✅ Browser Extension (Bucket 5) built. ✅ Admin API (Bucket 4) implemented. ✅ Samba/network-share source working. ✅ Source path editing fixed (user-verified). ✅ Live ingestion progress (user-verified). ✅ Catalog listing (folders/projects) implemented. ✅ Server running.
+**Date:** 2026-07-31 (evening session — closed out & published)
+**Status:** ✅ 36/36 tests passing. ✅ Ingestion + Query working. ✅ Upload link removed from query page. ✅ Browser Extension (Bucket 5) built. ✅ Admin API (Bucket 4) implemented. ✅ Samba/network-share source working. ✅ Source path editing fixed (user-verified). ✅ Live ingestion progress (user-verified). ✅ Catalog listing (folders/projects) implemented. ✅ Published to GitHub (`chitrangad/RAG-Assistant`, branch `main`). ✅ Docker deployment (Dockerfile + compose + .dockerignore). ✅ GHCR publishing workflow (`.github/workflows/docker-publish.yml`). ✅ Release tag `v0.1.0` pushed. ✅ Server running.
 **Server:** Running on PID 70628 (http://127.0.0.1:8000)
+
+---
+
+## Deployment & Publishing Session (2026-07-31, later)
+
+### Repository published to GitHub
+
+- Repo: **https://github.com/chitrangad/RAG-Assistant.git** (remote `origin`, branch `main`, SSH)
+- Commit history on `main` (most recent first):
+  1. `3c9e7f8` — Publish pre-built image to GHCR via GitHub Actions workflow; wire compose to `ghcr.io/chitrangad/rag-assistant`; update INSTALL.md §7.4
+  2. `e43dc2e` — Add Docker deployment: Dockerfile (pre-cached embedding model), docker-compose.yml, .dockerignore; update INSTALL.md §7; declare `python-multipart`
+  3. (initial) — Full project + README.md + INSTALL.md deployment guide
+- Local git identity: `chitrangad` / `chitrangad@users.noreply.github.com`
+- Secret-scan performed before each push (no `data/`, credentials, session secrets, venv, or zips staged).
+
+### Docker deployment (implemented — was roadmap)
+
+| File | Contents |
+|------|----------|
+| `Dockerfile` | `python:3.12-slim` + `libgomp1` (apt, needed by torch/onnxruntime), **CPU-only torch** from the PyTorch CPU index (single `--index-url` so the multi-GB CUDA wheel can never be pulled), `pip install .` from pyproject, **embedding model `all-MiniLM-L6-v2` pre-cached at build time** (container ingests/queries fully offline), `EXPOSE 8000`, `CMD uvicorn --host 0.0.0.0 --port 8000`. Runs as root (documented — keeps host-mounted `./data` writable). |
+| `docker-compose.yml` | Service `rag-assistant`: `build: .` + `image: ghcr.io/chitrangad/rag-assistant:latest`, port `8000:8000`, volume `./data:/app/data`, env `HOST`/`PORT`/`ANONYMIZED_TELEMETRY=False`, urllib healthcheck, `restart: unless-stopped`. |
+| `.dockerignore` | Excludes `data/`, `.venv`, `.git`, caches, `extension/`, `sample_docs/`, `tests/`, docs, db/log/zip files — everything the build needs survives (pyproject.toml, README.md, src/, alembic/). |
+| `INSTALL.md` | New deployment guide: §1–6 backend/extension setup, §7 Docker deployment, §8 backup/restore, §9 troubleshooting. |
+| `pyproject.toml` | **BUG FIX** — added `python-multipart>=0.0.9` (admin login `Form(...)` + uploads need it; host venv had it but it was undeclared, so the Docker image lacked it → FastAPI warned `pip install python-multipart` at startup). |
+
+**Bugs caught during Docker validation (all fixed):**
+1. `libgomp1` missing on Debian slim → runtime crash — added apt install.
+2. `python-multipart` undeclared → admin login would fail in the container — declared in pyproject.
+3. Invalid `torch==2.*+cpu` pin (PEP 440 wildcard + local label is a syntax error) → reverted to the proven single-index `pip install --index-url https://download.pytorch.org/whl/cpu torch` form.
+4. `--extra-index-url` fallback could let pip resolve CUDA torch from PyPI → removed; single index keeps the CPU build deterministic.
+
+**Validation:** real `docker build` succeeded (3×), `docker run` smoke printed `FINAL SMOKE OK` (torch, multipart, chromadb, `src.main`, pre-cached model all load), 36/36 host tests pass.
+
+### GHCR publishing workflow (implemented — was roadmap)
+
+`.github/workflows/docker-publish.yml` — **Build & Publish Docker Image**: triggers on push to `main`, `v*` tags, and `workflow_dispatch`.
+
+- Permissions: `contents: read`, `packages: write`, `actions: write` (the last one required for the Buildx `type=gha` cache — an explicit permissions block sets all unlisted scopes to `none`).
+- Job `test`: Python 3.12, CPU-only torch first, then `pip install ".[dev]"`, `pytest tests/ -q`.
+- Job `docker` (needs `test`): buildx → `docker/login-action` to GHCR with `GITHUB_TOKEN` → `metadata-action` tags (`latest` on default branch, `semver` `v*` → e.g. `0.1.0`, `sha-<short>`) → `build-push-action push: true` with gha cache.
+- `docker-compose.yml` `image:` wired to `ghcr.io/chitrangad/rag-assistant:latest` (keeping `build: .` so local `--build` still works and tags with the GHCR name).
+- INSTALL.md §7.4 rewritten from roadmap to implemented: tag table, pull-only compose snippet, GHCR access note.
+
+> **Post-push manual step:** GHCR packages are **private by default** after the first CI push. To allow unauthenticated pulls, set visibility → Public at `github.com/users/chitrangad/packages/container/package/rag-assistant` (or `docker login ghcr.io` with a `read:packages` token).
+
+### Release tag
+
+- Annotated tag **`v0.1.0`** created at `3c9e7f8` and pushed → triggers the GHCR workflow; publishes `ghcr.io/chitrangad/rag-assistant:0.1.0` (+ `sha-<short>`; no `latest` on tag pushes).
 
 ---
 
@@ -145,7 +193,7 @@ Previously the Scan button blocked until the whole share finished ingesting. Now
 
 ## Live Verification (2026-07-31)
 
-Both fixes from this session have been **user-verified end-to-end** through the admin UI at `http://127.0.0.1:8000/admin` (server PID 67369, health OK):
+Both fixes from this session have been **user-verified end-to-end** through the admin UI at `http://127.0.0.1:8000/admin` (server PID 70628, health OK):
 
 1. **Editing a source's path now persists** — PATCH → reload shows the new path; verified against the `omv` source.
 2. **Live scan shows progress** — clicking Scan returns immediately, the runs table shows a live progress bar/note ("Indexing X / Y documents") while ingestion runs in the background, and the run completes without blocking the UI.
@@ -212,5 +260,5 @@ Run tests: `.venv/bin/python3 -m pytest tests/ -v`
 | Bucket 4 | **Admin API** | ✅ Implemented (CRUD, scan, test, runs, health, live progress) |
 | Bucket 5 | **Browser Extension** | ✅ Built (needs calibration) |
 | Bucket 5 | Provider adapter calibration (live testing) | ❌ |
-| Bucket 6 | CI/CD, hardening, INSTALL.md | ❌ |
+| Bucket 6 | CI/CD, hardening, INSTALL.md | 🟡 Partial — INSTALL.md done; GitHub Actions CI + GHCR publishing done; Docker deployment done |
 | — | Automated tests for network-share / SMB connector | ❌ (no tests yet) |

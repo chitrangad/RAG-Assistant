@@ -59,7 +59,7 @@ tests/                    pytest suite
 
 ## Quickstart
 
-> **Full installation & deployment guide:** see [`INSTALL.md`](INSTALL.md) — backend setup, production run options (systemd), browser-extension distribution, backup/restore, and the Docker roadmap.
+> **Full installation & deployment guide:** see [`INSTALL.md`](INSTALL.md) — backend setup, production run options (systemd), browser-extension distribution, backup/restore, and **Docker deployment** (build locally or pull the pre-built image from GHCR).
 
 ### 1. Prerequisites
 
@@ -173,3 +173,12 @@ All settings have defaults (see `src/config.py`); override via environment varia
 ## Project Status
 
 See [`PROGRESS.md`](PROGRESS.md) for the live checkpoint: working features, the admin API (Bucket 4), the browser extension (Bucket 5), known gaps (Bucket 3 confidence scoring/citations, SMB connector tests), and how to restart the server.
+
+### Deployment options
+
+| Option | When | How |
+|--------|------|-----|
+| Bare metal | Dev / single laptop | `pip install -e ".[dev]"` then `uvicorn src.main:app` (INSTALL.md §4) |
+| systemd | Always-on laptop/server | User service (INSTALL.md §4.2) |
+| Docker (local build) | Any machine with Docker | `docker compose up -d --build` (INSTALL.md §7) |
+| Docker (pre-built image) | No-build deployments | `docker compose up -d` → pulls `ghcr.io/chitrangad/rag-assistant:latest` (INSTALL.md §7.4; image published by GitHub Actions on `main` and `v*` tags) |
