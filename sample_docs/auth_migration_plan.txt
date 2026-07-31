@@ -1,0 +1,50 @@
+Authentication Migration Plan
+===========================
+Project: Auth Service Modernization
+Version: 1.5.0
+Date: 2024-03-15
+
+1. OVERVIEW
+
+This plan covers the migration from our legacy session-based authentication
+to OAuth 2.0 / OpenID Connect using Auth0 as the identity provider.
+
+Related requirements:
+- REQ-450: Implement OAuth 2.0 authorization code flow
+- REQ-451: Support social login (Google, GitHub, Microsoft)
+- REQ-452: Token rotation and refresh token management
+
+Related change requests:
+- CR-2001: Add PKCE support for SPAs
+- CR-2002: Implement session termination across all devices
+
+2. PHASES
+
+Phase 1: Dual-Run (Weeks 1-4)
+  - Deploy Auth0 side-by-side with existing session auth
+  - Legacy tokens and OAuth tokens both accepted
+  - Monitor error rates and latency
+  - CR-2001 must be completed before this phase ends
+
+Phase 2: Gradual Cutover (Weeks 5-8)
+  - Begin routing new sessions through OAuth flow
+  - Existing sessions continue using legacy tokens
+  - Dashboard to monitor migration progress in real-time
+
+Phase 3: Legacy Shutdown (Weeks 9-10)
+  - All sessions use OAuth 2.0
+  - Legacy session store decommissioned
+  - Final audit of active tokens
+
+3. ROLLBACK PLAN
+
+If critical issues arise during Phase 2:
+- Flip feature flag "oauth_migration_enabled" to false
+- All new sessions fall back to legacy auth
+- Existing OAuth sessions remain valid (no disruption)
+- Notify #auth-team on Slack
+
+4. OPEN QUESTIONS
+
+- Should we support SAML for enterprise customers? (REQ-453)
+- Token storage strategy for mobile apps — Keychain vs. encrypted storage?

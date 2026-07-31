@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG Knowledge Assistant</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Corporate colour palette ─────────────────────── */
+  :root {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --border-focus: #93c5fd;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-subtle: #94a3b8;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --accent: #3b82f6;
+    --success: #059669;
+    --success-bg: #d1fae5;
+    --warning: #d97706;
+    --warning-bg: #fef3c7;
+    --danger: #dc2626;
+    --danger-bg: #fecaca;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+    --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .container { max-width: 800px; margin: 0 auto; padding: 2.5rem 1rem 2rem; flex: 1; }
+
+  /* ── Header ─────────────────────────────────────── */
+  header { text-align: center; margin-bottom: 1.8rem; }
+  header .logo {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: 1.6rem; font-weight: 800; color: var(--primary);
+    letter-spacing: -0.02em;
+  }
+  header .logo-icon { font-size: 1.5rem; }
+  .subtitle {
+    color: var(--text-muted); font-size: 0.88rem; margin-top: 0.4rem;
+    font-weight: 400;
+  }
+
+  /* ── Status bar ─────────────────────────────────── */
+  .status-bar {
+    display: flex; gap: 0.6rem; justify-content: center; align-items: center;
+    margin-bottom: 2rem; flex-wrap: wrap;
+  }
+  .status-item {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 0.4rem 0.75rem;
+    font-size: 0.78rem; color: var(--text-muted);
+    box-shadow: var(--shadow);
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.ok { background: var(--success); }
+  .status-dot.err { background: var(--danger); }
+  .status-dot.load { background: var(--warning); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+  .status-num { color: var(--primary); font-weight: 700; }
+
+  /* ── Search hero ────────────────────────────────── */
+  .search-hero { margin-bottom: 1.5rem; }
+  .search-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.6rem;
+    box-shadow: var(--shadow-lg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .search-box:focus-within {
+    border-color: var(--border-focus);
+    box-shadow: 0 4px 20px rgba(37,99,235,0.08);
+  }
+  .search-box label {
+    display: block; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted);
+    font-weight: 700; margin-bottom: 0.6rem;
+  }
+  .search-row { display: flex; gap: 0.5rem; align-items: stretch; }
+  .search-row input {
+    flex: 1; padding: 0.75rem 1rem; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-size: 0.95rem; min-width: 0;
+    font-family: var(--font);
+  }
+  .search-row input:focus { outline: none; border-color: var(--primary); }
+  .search-row input::placeholder { color: var(--text-subtle); }
+  .btn-search {
+    padding: 0.75rem 1.5rem; border-radius: var(--radius); border: none;
+    background: var(--primary); color: white; font-weight: 700;
+    font-size: 0.9rem; cursor: pointer; white-space: nowrap;
+    transition: background 0.15s, transform 0.1s;
+    font-family: var(--font);
+  }
+  .btn-search:hover { background: var(--primary-hover); }
+  .btn-search:active { transform: scale(0.97); }
+  .btn-search:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .example-row { display: flex; gap: 0.4rem; margin-top: 0.75rem; flex-wrap: wrap; }
+  .example-chip {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-muted); padding: 0.35rem 0.75rem;
+    border-radius: 20px; font-size: 0.76rem; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
+    font-family: var(--font);
+  }
+  .example-chip:hover {
+    background: #eff6ff; color: var(--primary); border-color: var(--border-focus);
+  }
+
+  /* ── Results area ───────────────────────────────── */
+  #results-area { margin-top: 0.5rem; }
+  .results-summary {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;
+  }
+  .results-count { color: var(--text-muted); font-size: 0.8rem; }
+  .results-count strong { color: var(--text); }
+
+  /* ── Evidence card ──────────────────────────────── */
+  .evidence-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 0.7rem; overflow: hidden;
+    animation: fadeIn 0.3s ease;
+    box-shadow: var(--shadow);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .evidence-card:hover {
+    border-color: var(--border-focus);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .card-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 0.9rem 1rem 0; gap: 0.5rem; flex-wrap: wrap;
+  }
+  .card-headline {
+    font-weight: 700; font-size: 0.92rem; color: var(--text);
+    line-height: 1.4; flex: 1; min-width: 180px;
+  }
+  .card-badges { display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+  .badge-severity {
+    font-size: 0.66rem; padding: 0.15rem 0.5rem; border-radius: 4px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .badge-severity.critical { background: #fecaca; color: #991b1b; }
+  .badge-severity.high { background: #fecaca; color: #991b1b; }
+  .badge-severity.medium { background: var(--warning-bg); color: #92400e; }
+  .badge-severity.low { background: #dbeafe; color: #1e40af; }
+  .badge-status {
+    font-size: 0.66rem; padding: 0.15rem 0.5rem; border-radius: 4px;
+    font-weight: 600; background: var(--bg); color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .badge-status.open { background: var(--success-bg); color: #065f46; border-color: #a7f3d0; }
+  .badge-status.closed { background: #f3e8ff; color: #6b21a8; border-color: #d8b4fe; }
+
+  .card-body { padding: 0.5rem 1rem 0.4rem; }
+  .card-text {
+    font-size: 0.82rem; line-height: 1.65; color: var(--text-muted);
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  .card-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.55rem 1rem 0.55rem; gap: 0.5rem; flex-wrap: wrap;
+    border-top: 1px solid var(--bg);
+  }
+  .card-source {
+    font-size: 0.73rem; color: var(--primary); font-weight: 500;
+    display: flex; align-items: center; gap: 0.3rem;
+  }
+  .card-path {
+    font-size: 0.68rem; color: var(--text-subtle);
+    padding: 0.25rem 1rem 0.6rem; font-family: monospace;
+    word-break: break-all;
+  }
+  .card-score { font-size: 0.68rem; color: var(--text-subtle); }
+  .card-score strong { color: var(--text-muted); }
+  .card-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .tag {
+    font-size: 0.64rem; padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-weight: 600;
+  }
+  .tag.req { background: #dbeafe; color: #1e40af; }
+  .tag.cr { background: #f3e8ff; color: #6b21a8; }
+  .tag.project { background: var(--success-bg); color: #065f46; }
+
+  /* ── Folder listing (catalog view) ───────────────── */
+  .folder-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 0.6rem; padding: 0.9rem 1rem;
+    display: flex; align-items: center; gap: 0.8rem;
+    animation: fadeIn 0.3s ease; box-shadow: var(--shadow);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .folder-card:hover {
+    border-color: var(--border-focus); box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .folder-icon {
+    font-size: 1.4rem; flex-shrink: 0; width: 2.2rem; height: 2.2rem;
+    background: #eff6ff; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .folder-main { flex: 1; min-width: 0; }
+  .folder-name {
+    font-weight: 700; font-size: 0.9rem; color: var(--text);
+    word-break: break-word;
+  }
+  .folder-meta {
+    font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;
+  }
+  .folder-meta strong { color: var(--primary); }
+  .folder-count {
+    flex-shrink: 0; font-size: 0.68rem; color: var(--text-subtle);
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 0.2rem 0.55rem; border-radius: 20px; font-weight: 600;
+  }
+
+  /* ── States ─────────────────────────────────────── */
+  .empty-state { text-align: center; padding: 3.5rem 1rem; }
+  .empty-icon { font-size: 3rem; margin-bottom: 0.75rem; opacity: 0.5; }
+  .empty-state p { font-size: 0.9rem; line-height: 1.6; color: var(--text-muted); }
+  .loading-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
+  .loading-spinner {
+    display: inline-block; width: 26px; height: 26px;
+    border: 3px solid var(--border); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    margin-bottom: 0.6rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg {
+    background: #fef2f2; color: #991b1b; padding: 0.8rem 1rem;
+    border-radius: var(--radius); margin: 1rem 0;
+    border: 1px solid var(--danger-bg); font-size: 0.82rem;
+  }
+  .no-results { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
+  .no-results strong { color: var(--text); }
+
+  /* ── Extension footer ───────────────────────────── */
+  .ext-footer {
+    margin-top: 2.5rem; padding: 1rem 1.1rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 0.75rem;
+  }
+  .ext-footer p { font-size: 0.78rem; color: var(--text-muted); }
+  .ext-footer strong { color: var(--text); }
+  .ext-links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+  .ext-link {
+    padding: 0.35rem 0.7rem; border-radius: 5px; font-size: 0.73rem;
+    font-weight: 600; text-decoration: none; transition: background 0.15s, color 0.15s;
+    background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);
+  }
+  .ext-link:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* ── Footer links ───────────────────────────────── */
+  .footer-links {
+    text-align: center; margin-top: 1.5rem; padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .footer-links a {
+    color: var(--text-subtle); margin: 0 0.5rem; text-decoration: none;
+    font-size: 0.73rem;
+  }
+  .footer-links a:hover { color: var(--primary); }
+
+  /* ── Developer credit ───────────────────────────── */
+  .dev-credit {
+    text-align: center; margin-top: 0.6rem; font-size: 0.66rem;
+    color: #cbd5e1;
+  }
+
+  /* ── Toast ──────────────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    padding: 0.5rem 1.1rem; background: var(--text); color: white;
+    border-radius: var(--radius); font-size: 0.8rem; font-weight: 600;
+    animation: toastIn 2.6s ease forwards; z-index: 999;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2); text-align: center;
+  }
+  @keyframes toastIn {
+    0%{opacity:0;transform:translateX(-50%) translateY(12px);}
+    10%{opacity:1;transform:translateX(-50%) translateY(0);}
+    82%{opacity:1}
+    100%{opacity:0}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <span class="logo-icon">📚</span>RAG Knowledge Assistant
+    </div>
+    <p class="subtitle">Search your organisation's document repository with precision</p>
+  </header>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="status-item">
+      <div class="status-dot load" id="health-dot"></div>
+      <span id="health-text">Checking...</span>
+    </div>
+    <div class="status-item">
+      Indexed: <span class="status-num" id="chunk-count">...</span> items
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="search-hero">
+    <div class="search-box">
+      <label for="main-query">What would you like to know?</label>
+      <div class="search-row">
+        <input type="text" id="main-query" placeholder="e.g. What are the security findings in the Q1 audit report?" autofocus>
+        <button class="btn-search" id="search-btn" onclick="searchDocuments()">Search</button>
+      </div>
+    </div>
+    <div class="example-row">
+      <button class="example-chip" onclick="runExample('What security findings exist?')">Security findings</button>
+      <button class="example-chip" onclick="runExample('Summarise the auth migration plan')">Auth migration</button>
+      <button class="example-chip" onclick="runExample('What architecture decisions were made?')">Architecture</button>
+      <button class="example-chip" onclick="runExample('What are the key requirements?')">Requirements</button>
+      <button class="example-chip" onclick="runExample('List all documents in the repository')">All documents</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-area">
+    <div class="empty-state">
+      <div class="empty-icon">📚</div>
+      <p>Ask a question above to search your indexed documents.<br>Evidence will appear here with source citations and metadata.</p>
+    </div>
+  </div>
+
+  <!-- Extension footer -->
+  <div class="ext-footer">
+    <p><strong>🧩 Using the browser extension?</strong> Open any AI chat — evidence is injected automatically.</p>
+    <div class="ext-links">
+      <a class="ext-link" href="https://gemini.google.com" target="_blank" rel="noopener">Gemini ↗</a>
+      <a class="ext-link" href="https://chatgpt.com" target="_blank" rel="noopener">ChatGPT ↗</a>
+      <a class="ext-link" href="https://copilot.microsoft.com" target="_blank" rel="noopener">Copilot ↗</a>
+      <a class="ext-link" href="https://claude.ai" target="_blank" rel="noopener">Claude ↗</a>
+    </div>
+  </div>
+
+  <div class="footer-links">
+    <a href="/docs">API Docs</a>
+    <a href="/api/health">Health</a>
+    <a href="/api/ingest/stats">Statistics</a>
+    <a href="/admin">⚙ Administration</a>
+  </div>
+
+  <div class="dev-credit">Developed by Chitrangad Singh</div>
+</div>
+
+<script>
+// ── Status ──────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch('/api/health');
+    const dot = document.getElementById('health-dot');
+    const txt = document.getElementById('health-text');
+    if (r.ok) { dot.className = 'status-dot ok'; txt.textContent = 'Connected'; }
+    else { dot.className = 'status-dot err'; txt.textContent = 'Backend error'; }
+  } catch(e) {
+    document.getElementById('health-dot').className = 'status-dot err';
+    document.getElementById('health-text').textContent = 'Unreachable';
+  }
+  try {
+    const r = await fetch('/api/ingest/stats');
+    const d = await r.json();
+    document.getElementById('chunk-count').textContent = d.chunks_indexed || 0;
+  } catch(e) { document.getElementById('chunk-count').textContent = '?'; }
+}
+
+// ── Extract metadata from chunk text ────────────────────────────
+function extractMeta(text) {
+  const meta = { severity: null, status: null, headline: '' };
+
+  let m = text.match(/Severity:\s*\*{0,2}(\w+)\*{0,2}/i);
+  if (m) meta.severity = m[1].toLowerCase();
+
+  m = text.match(/Status:\s*\*{0,2}(\w[\w\s]*?)\*{0,2}(?:\n|$)/i);
+  if (m) meta.status = m[1].trim().toLowerCase();
+
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const cleaned = line.replace(/^#+\s*/, '').replace(/\*{1,3}/g, '').trim();
+    if (cleaned && !cleaned.startsWith('**') && cleaned.length > 10) {
+      meta.headline = cleaned.substring(0, 120);
+      break;
+    }
+  }
+  if (!meta.headline) {
+    meta.headline = text.replace(/[#*]/g, '').trim().substring(0, 100);
+  }
+
+  meta.cleanText = text
+    .replace(/^#+\s+/gm, '').replace(/\*{1,3}/g, '').trim()
+    .substring(0, 600);
+  if (text.replace(/[#*]/g,'').trim().length > 600) meta.cleanText += '...';
+
+  return meta;
+}
+
+// ── Build evidence card HTML ───────────────────────────────────
+function buildCard(res, idx) {
+  const meta = extractMeta(res.chunk_content);
+  const pct = Math.round(res.relevance_score * 100);
+
+  let sevBadge = '';
+  if (meta.severity) {
+    sevBadge = '<span class="badge-severity ' + meta.severity + '">' + meta.severity + '</span>';
+  }
+
+  let statusBadge = '';
+  if (meta.status) {
+    const statusClass = ['open','in progress','pending'].includes(meta.status) ? 'open' : 'closed';
+    statusBadge = '<span class="badge-status ' + statusClass + '">' + meta.status + '</span>';
+  }
+
+  let tags = '';
+  (res.project_names || []).forEach(p => { if(p) tags += '<span class="tag project">' + p + '</span>'; });
+  (res.requirement_ids || []).forEach(r => { if(r) tags += '<span class="tag req">REQ-' + r + '</span>'; });
+  (res.cr_numbers || []).forEach(c => { if(c) tags += '<span class="tag cr">CR-' + c + '</span>'; });
+
+  return '<div class="evidence-card">' +
+    '<div class="card-top">' +
+      '<div class="card-headline">' + (idx + 1) + '. ' + meta.headline + '</div>' +
+      '<div class="card-badges">' + sevBadge + statusBadge + '</div>' +
+    '</div>' +
+    '<div class="card-body"><div class="card-text">' + meta.cleanText + '</div></div>' +
+    '<div class="card-footer">' +
+      '<div class="card-source">📄 ' + res.document_name + ' <span class="card-score">· <strong>' + pct + '%</strong> match</span></div>' +
+      (tags ? '<div class="card-tags">' + tags + '</div>' : '') +
+    '</div>' +
+    (res.file_path ? '<div class="card-path">📁 ' + res.file_path + '</div>' : '') +
+  '</div>';
+}
+
+// ── Main search ─────────────────────────────────────────────────
+function runExample(q) {
+  document.getElementById('main-query').value = q;
+  searchDocuments();
+}
+
+async function searchDocuments() {
+  const q = document.getElementById('main-query').value.trim();
+  if (!q) return;
+
+  const btn = document.getElementById('search-btn');
+  const area = document.getElementById('results-area');
+  btn.disabled = true;
+  area.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Searching documents...</p></div>';
+
+  try {
+    const r = await fetch('/api/chat/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: q, top_k: 5})
+    });
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      area.innerHTML = '<div class="error-msg">' + (err.detail || 'Search failed. Is the backend running?') + '</div>';
+      return;
+    }
+
+    const d = await r.json();
+
+    // Catalog listing response (folders/projects)
+    if (d.intent === 'listing') {
+      if (!d.folders || d.folders.length === 0) {
+        area.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><p>No documents indexed yet.<br>Ask an admin to ingest documents from a source, then try again.</p></div>';
+        return;
+      }
+      let html = '<div class="results-summary"><span class="results-count">Found <strong>' + d.folders.length + '</strong> folder(s)/project(s) · ' + d.folders.reduce((s,f)=>s+f.document_count,0) + ' documents</span></div>';
+      d.folders.forEach((f, idx) => {
+        const src = f.sources && f.sources.length ? ' · from <strong>' + f.sources.join(', ') + '</strong>' : '';
+        html += '<div class="folder-card">' +
+          '<div class="folder-icon">📁</div>' +
+          '<div class="folder-main">' +
+            '<div class="folder-name">' + (idx + 1) + '. ' + f.folder + '</div>' +
+            '<div class="folder-meta">' + f.document_count + ' document(s)' + src + '</div>' +
+          '</div>' +
+          '<div class="folder-count">' + f.document_count + ' files</div>' +
+        '</div>';
+      });
+      area.innerHTML = html;
+      return;
+    }
+
+    if (!d.results || d.results.length === 0) {
+      area.innerHTML = '<div class="no-results">No matching evidence found for <strong>"' + q + '"</strong>.<br>Try rephrasing your question or using different keywords.</div>';
+      return;
+    }
+
+    let html = '<div class="results-summary"><span class="results-count">Found <strong>' + d.results.length + '</strong> result(s) across <strong>' + d.total_chunks_searched + '</strong> chunks</span></div>';
+    d.results.forEach((res, idx) => { html += buildCard(res, idx); });
+    area.innerHTML = html;
+
+  } catch(e) {
+    area.innerHTML = '<div class="error-msg">Connection error: ' + e.message + '<br><small>Make sure the backend is running on this server.</small></div>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('main-query').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchDocuments();
+});
+
+loadStats();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual env
+.venv/
+
+# Data (credentials, SQLite catalog, ChromaDB, uploads)
+data/
+
+# Local docs pack (keep on disk, not in git)
+project_knowledge_assistant_updated_documentation_pack.zip
+
+# Testing
+.pytest_cache/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+
+# Browser Extension (generated assets)
+extension/icons/icon*.png
+
+# OS
+.DS_Store
+Thumbs.db

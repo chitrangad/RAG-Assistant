@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-knowledge-assistant"
+version = "0.1.0"
+description = "Project Knowledge & Requirement Traceability Assistant"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.141.0",
+    "uvicorn[standard]>=0.52.0",
+    "sqlalchemy[asyncio]>=2.0.51",
+    "alembic>=1.18.0",
+    "aiosqlite>=0.22.0",
+    "pydantic>=2.13.0",
+    "pydantic-settings>=2.14.0",
+    "structlog>=26.1.0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=2.2.0",
+    "PyMuPDF>=1.23.0",
+    "python-docx>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+    "httpx>=0.28.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

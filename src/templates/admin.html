@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administration — RAG Knowledge Assistant</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-subtle: #94a3b8;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #059669;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --danger-bg: #fecaca;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06);
+    --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  .container { max-width: 980px; margin: 0 auto; padding: 2rem 1rem; }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+  }
+  h1 { font-size: 1.4rem; font-weight: 800; color: var(--primary); }
+  .nav-links { display: flex; gap: 0.6rem; }
+  .nav-links a {
+    color: var(--text-muted); text-decoration: none; font-size: 0.82rem;
+    font-weight: 600; padding: 0.35rem 0.7rem; border-radius: 5px;
+    border: 1px solid var(--border); transition: all 0.15s;
+  }
+  .nav-links a:hover { color: var(--primary); border-color: var(--primary); background: #eff6ff; }
+
+  /* Health bar */
+  .health-bar { display: flex; gap: 0.6rem; margin-bottom: 1.8rem; flex-wrap: wrap; }
+  .health-card {
+    flex: 1; min-width: 110px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 0.8rem; text-align: center; box-shadow: var(--shadow);
+  }
+  .health-card .val { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+  .health-card .lbl { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+  .health-card.ok { border-color: var(--success); }
+
+  .section { margin-bottom: 1.8rem; }
+  .section-title {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); font-weight: 700; margin-bottom: 0.6rem;
+  }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0.6rem 0.7rem; text-align: left; font-size: 0.8rem; }
+  th {
+    color: var(--text-muted); font-weight: 600; text-transform: uppercase;
+    font-size: 0.68rem; letter-spacing: 0.04em; border-bottom: 2px solid var(--border);
+  }
+  td { border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:hover td { background: #f8fafc; }
+
+  .status-dot-sm { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; }
+  .status-dot-sm.ok { background: var(--success); }
+  .status-dot-sm.err { background: var(--danger); }
+  .status-dot-sm.warn { background: var(--warning); }
+
+  .btn-sm {
+    padding: 0.22rem 0.5rem; border-radius: 4px; font-size: 0.68rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s; font-family: var(--font);
+  }
+  .btn-sm:hover { background: #f8fafc; color: var(--text); border-color: var(--text-subtle); }
+  .btn-sm.danger:hover { background: #fef2f2; color: var(--danger); border-color: var(--danger-bg); }
+  .btn-sm.primary { background: var(--primary); color: white; border-color: var(--primary); }
+  .btn-sm.primary:hover { background: var(--primary-hover); }
+  .btn-sm.outline { background: transparent; color: var(--primary); border-color: var(--primary); }
+  .btn-sm.outline:hover { background: #eff6ff; }
+
+  /* Danger zone */
+  .danger-zone { border: 1px solid var(--danger-bg); border-radius: var(--radius); overflow: hidden; }
+  .danger-zone .dz-header {
+    background: #fef2f2; padding: 0.75rem 1rem;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  }
+  .danger-zone .dz-header p { color: #991b1b; font-size: 0.82rem; font-weight: 600; }
+  .danger-zone .dz-header small { color: #b91c1c; font-size: 0.68rem; }
+  .danger-zone .dz-body {
+    background: var(--surface); padding: 0.9rem 1rem;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 0.7rem;
+  }
+  .danger-zone .dz-body p { color: var(--text-muted); font-size: 0.76rem; }
+  .danger-zone .dz-body strong { color: var(--text); }
+  .btn-danger {
+    padding: 0.4rem 0.8rem; border-radius: 5px; border: 1px solid var(--danger-bg);
+    background: #fef2f2; color: #991b1b; font-weight: 700; font-size: 0.78rem;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: var(--font);
+  }
+  .btn-danger:hover { background: var(--danger-bg); }
+  .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Confirm dialog */
+  .confirm-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; animation: fadeInOverlay 0.2s ease;
+  }
+  @keyframes fadeInOverlay { from { opacity: 0; } to { opacity: 1; } }
+  .confirm-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.5rem; max-width: 420px; width: 90%;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  }
+  .confirm-box h3 { font-size: 1.1rem; color: var(--text); margin-bottom: 0.5rem; }
+  .confirm-box p { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1rem; }
+  .confirm-box .confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+  .btn-cancel {
+    padding: 0.4rem 0.8rem; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); font-weight: 600;
+    font-size: 0.8rem; cursor: pointer; font-family: var(--font);
+  }
+  .btn-cancel:hover { background: var(--bg); }
+  .confirm-box input[type="text"] {
+    width: 100%; padding: 0.5rem 0.7rem; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-size: 0.85rem; margin-bottom: 0.75rem;
+  }
+  .confirm-box input[type="text"]:focus { outline: none; border-color: var(--danger); }
+
+  /* ── Edit modal ──────────────────────────────────── */
+  .edit-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001;
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeInOverlay 0.2s ease;
+  }
+  .edit-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.5rem; max-width: 560px; width: 92%;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15); animation: fadeIn 0.25s ease;
+  }
+  .edit-box h3 { font-size: 1.05rem; color: var(--text); margin-bottom: 0.8rem; }
+  .edit-box .edit-row { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; align-items: end; }
+  .edit-box .edit-row:last-child { margin-bottom: 0; }
+  .edit-box .edit-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+  /* Forms */
+  .form-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.2rem; box-shadow: var(--shadow);
+  }
+  .form-row { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; flex-wrap: wrap; align-items: end; }
+  .form-row:last-child { margin-bottom: 0; }
+  .form-group { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; min-width: 130px; }
+  .form-group label {
+    font-size: 0.68rem; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .form-group input, .form-group select {
+    padding: 0.45rem 0.6rem; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 0.83rem; font-family: var(--font);
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+  .btn-primary {
+    padding: 0.45rem 1rem; border-radius: 5px; border: none;
+    background: var(--primary); color: white; font-weight: 700;
+    font-size: 0.82rem; cursor: pointer; white-space: nowrap;
+    transition: background 0.15s; font-family: var(--font);
+  }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* Collapsible auth section */
+  .auth-toggle {
+    display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.76rem;
+    color: var(--primary); cursor: pointer; font-weight: 600; margin-top: 0.3rem;
+    user-select: none; font-family: var(--font);
+  }
+  .auth-toggle:hover { text-decoration: underline; }
+  .auth-section { display: none; margin-top: 0.5rem; }
+  .auth-section.open { display: block; }
+  .auth-row {
+    display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end;
+    padding: 0.6rem; background: #f8fafc; border-radius: 5px;
+    border: 1px dashed var(--border);
+  }
+
+  /* Run status */
+  .run-status { font-size: 0.68rem; padding: 0.1rem 0.4rem; border-radius: 3px; font-weight: 600; }
+  .run-status.completed { background: #d1fae5; color: #065f46; }
+  .run-status.completed_with_errors { background: #fef3c7; color: #92400e; }
+  .run-status.failed { background: var(--danger-bg); color: #991b1b; }
+  .run-status.running { background: #dbeafe; color: #1d4ed8; }
+  .run-status.pending { background: var(--bg); color: var(--text-muted); }
+
+  /* Live ingestion progress */
+  .progress-wrap { display: flex; align-items: center; gap: 0.4rem; }
+  .progress-track {
+    width: 90px; height: 6px; background: var(--border); border-radius: 4px;
+    overflow: hidden; position: relative;
+  }
+  .progress-fill {
+    height: 100%; background: var(--primary); border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .progress-pct { font-size: 0.66rem; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 2.6em; }
+  .scan-progress-note {
+    margin-top: 0.5rem; padding: 0.5rem 0.7rem; border-radius: 5px;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    font-size: 0.74rem; display: none; align-items: center; gap: 0.5rem;
+  }
+  .scan-progress-note.visible { display: flex; }
+  .scan-progress-note .spinner {
+    width: 12px; height: 12px; border: 2px solid #bfdbfe; border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  .scan-progress-note .note-track {
+    flex: 1; height: 8px; background: #dbeafe; border-radius: 4px; overflow: hidden;
+  }
+  .scan-progress-note .note-fill {
+    height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.4s ease;
+  }
+
+  /* ── Files panel ──────────────────────────────────── */
+  .files-panel {
+    margin-top: 0.5rem; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; display: none;
+    box-shadow: var(--shadow);
+  }
+  .files-panel.open { display: block; }
+  .files-panel .fp-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.55rem 0.8rem; background: #f8fafc;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.4rem;
+  }
+  .files-panel .fp-head strong { font-size: 0.78rem; color: var(--text); }
+  .files-panel .fp-head small { color: var(--text-muted); font-size: 0.68rem; }
+  .files-panel .fp-body {
+    max-height: 320px; overflow-y: auto;
+  }
+  .files-panel table { margin: 0; }
+  .files-panel td, .files-panel th { padding: 0.4rem 0.7rem; }
+  .files-panel td:first-child { font-weight: 600; }
+  .files-panel .fp-empty { padding: 0.9rem; color: var(--text-muted); font-size: 0.76rem; text-align: center; }
+  .fp-loading { padding: 0.8rem; text-align: center; color: var(--text-muted); font-size: 0.74rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    padding: 0.5rem 1.1rem; border-radius: var(--radius); font-size: 0.78rem;
+    font-weight: 600; animation: toastIn 2.8s ease forwards; z-index: 999;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); text-align: center;
+  }
+  .toast.success { background: #065f46; color: white; }
+  .toast.error { background: #991b1b; color: white; }
+  .toast.info { background: var(--primary); color: white; }
+  @keyframes toastIn {
+    0%{opacity:0;transform:translateX(-50%) translateY(12px);}
+    8%{opacity:1;transform:translateX(-50%) translateY(0);}
+    85%{opacity:1}
+    100%{opacity:0}
+  }
+
+  .loading { text-align: center; color: var(--text-muted); padding: 1rem; }
+  .loading-spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    margin-right: 0.35rem; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .credential-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--success); margin-right: 4px;
+  }
+
+  .btn-sm.running {
+    background: var(--primary); color: white; border-color: var(--primary);
+    opacity: 0.75; cursor: default;
+  }
+  .btn-sm.running:hover { background: var(--primary); color: white; }
+
+  /* Developer credit */
+  .dev-credit {
+    text-align: center; margin-top: 2rem; font-size: 0.66rem; color: #cbd5e1;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>⚙ Administration</h1>
+    <div class="nav-links">
+      <a href="/">← Back to Search</a>
+      <a href="/docs">API Docs</a>
+    </div>
+  </header>
+
+  <!-- Health -->
+  <div class="section-title">System Overview</div>
+  <div class="health-bar" id="health-bar">
+    <div class="health-card"><div class="val" id="h-sources">…</div><div class="lbl">Sources</div></div>
+    <div class="health-card"><div class="val" id="h-docs">…</div><div class="lbl">Documents</div></div>
+    <div class="health-card"><div class="val" id="h-chunks">…</div><div class="lbl">Chunks</div></div>
+    <div class="health-card"><div class="val" id="h-runs">…</div><div class="lbl">Ing. Runs</div></div>
+  </div>
+
+  <!-- Add Source -->
+  <div class="section">
+    <div class="section-title">Add Data Source</div>
+    <div class="form-card">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Source Name</label>
+          <input type="text" id="src-name" placeholder="e.g. Engineering Network Drive">
+        </div>
+        <div class="form-group" style="max-width:150px">
+          <label>Type</label>
+          <select id="src-type" onchange="updatePathHint()">
+            <option value="network_share">Network Share</option>
+            <option value="local_folder">Local Folder</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Path</label>
+          <input type="text" id="src-path" placeholder="e.g. //server/share/docs or /mnt/docs">
+          <small id="path-hint" style="color:var(--text-subtle);font-size:0.68rem;margin-top:0.15rem">Any mounted network path — Windows UNC, Linux GVFS, macOS — or SMB with credentials</small>
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label>Scan Mode</label>
+          <select id="src-scan">
+            <option value="incremental">Incremental</option>
+            <option value="full">Full</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="max-width:200px">
+          <label>Owner Email (optional)</label>
+          <input type="email" id="src-email" placeholder="owner@company.com">
+        </div>
+        <button class="btn-primary" onclick="addSource()">➕ Add Source</button>
+        <span class="auth-toggle" onclick="toggleAuth()">🔑 Network Credentials ▾</span>
+      </div>
+      <div class="auth-section" id="auth-section">
+        <div class="auth-row">
+          <div class="form-group" style="max-width:170px">
+            <label>Username</label>
+            <input type="text" id="src-net-user" placeholder="DOMAIN\user or user">
+          </div>
+          <div class="form-group" style="max-width:170px">
+            <label>Password</label>
+            <input type="password" id="src-net-pass" placeholder="Network password">
+          </div>
+          <div class="form-group" style="max-width:140px">
+            <label>Domain (optional)</label>
+            <input type="text" id="src-net-domain" placeholder="e.g. CORP">
+          </div>
+          <button class="btn-sm outline" style="margin-bottom:0.2rem" onclick="testNewSource()" id="test-btn">🔌 Test Connection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sources -->
+  <div class="section">
+    <div class="section-title">Registered Sources</div>
+    <div id="sources-table"><div class="loading"><span class="loading-spinner"></span>Loading...</div></div>
+  </div>
+
+  <!-- Clear All Data -->
+  <div class="section">
+    <div class="section-title">Data Management</div>
+    <div class="danger-zone">
+      <div class="dz-header">
+        <p>⚠ Clear All Ingested Data</p>
+        <small>Source configurations are preserved</small>
+      </div>
+      <div class="dz-body">
+        <p>Permanently removes <strong>all</strong> documents, chunks, metadata, and ingestion history. <strong>This cannot be undone.</strong></p>
+        <button class="btn-danger" onclick="clearAllData()">🗑 Clear All Data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Runs -->
+  <div class="section">
+    <div class="section-title">Recent Ingestion Runs</div>
+    <div class="scan-progress-note" id="scan-progress-note">
+      <span class="spinner"></span>
+      <span id="scan-progress-text">Scanning…</span>
+      <div class="note-track"><div class="note-fill" id="scan-progress-fill" style="width:0%"></div></div>
+      <span class="progress-pct" id="scan-progress-pct">0%</span>
+    </div>
+    <div id="runs-table"><div class="loading"><span class="loading-spinner"></span>Loading...</div></div>
+  </div>
+
+  <div class="dev-credit">Developed by Chitrangad Singh</div>
+</div>
+
+<script>
+// ── Helpers ─────────────────────────────────────────────────────
+function showToast(msg, type) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type || 'success');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
+function toggleAuth() {
+  document.getElementById('auth-section').classList.toggle('open');
+}
+
+function statusDot(status) {
+  if (!status || status === 'completed') return '<span class="status-dot-sm ok"></span>';
+  if (status.includes('error')) return '<span class="status-dot-sm err"></span>';
+  return '<span class="status-dot-sm warn"></span>';
+}
+
+function runStatusBadge(status) {
+  const s = status || 'pending';
+  return '<span class="run-status ' + s + '">' + s.replace(/_/g, ' ') + '</span>';
+}
+
+// ── Live scan progress ────────────────────────────────────────────
+let _scanPollTimer = null;
+let _activeRunId = null;
+
+function showScanProgress(run) {
+  const note = document.getElementById('scan-progress-note');
+  if (!run || run.status === 'running' || run.status === 'pending') {
+    note.classList.add('visible');
+    const total = run ? (run.documents_discovered || 0) : 0;
+    const done = run ? (run.documents_indexed || 0) : 0;
+    const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    document.getElementById('scan-progress-text').textContent =
+      run && run.documents_discovered > 0
+        ? 'Indexing ' + done + ' / ' + total + ' documents'
+        : 'Discovering documents…';
+    document.getElementById('scan-progress-fill').style.width = pct + '%';
+    document.getElementById('scan-progress-pct').textContent = pct + '%';
+  } else {
+    note.classList.remove('visible');
+  }
+}
+
+function startScanPolling(runId) {
+  stopScanPolling();
+  _activeRunId = runId;
+  _scanPollTimer = setInterval(async () => {
+    if (!_activeRunId) return;
+    try {
+      const r = await fetch('/api/admin/runs/' + _activeRunId);
+      if (!r.ok) { stopScanPolling(); return; }
+      const run = await r.json();
+      showScanProgress(run);
+      loadRuns();
+      if (run.status === 'completed' || run.status === 'completed_with_errors') {
+        stopScanPolling();
+        showToast('Scan complete: ' + run.documents_indexed + ' of ' + run.documents_discovered + ' documents indexed');
+        loadSources(); loadHealth();
+      } else if (run.status === 'failed') {
+        stopScanPolling();
+        showToast('Scan failed: ' + (run.errors || 'unknown error'), 'error');
+        loadSources(); loadHealth();
+      }
+    } catch(e) {
+      // transient error — keep polling
+    }
+  }, 1500);
+}
+
+function stopScanPolling() {
+  if (_scanPollTimer) { clearInterval(_scanPollTimer); _scanPollTimer = null; }
+  _activeRunId = null;
+  document.getElementById('scan-progress-note').classList.remove('visible');
+}
+
+// ── Health ──────────────────────────────────────────────────────
+async function loadHealth() {
+  try {
+    const r = await fetch('/api/admin/health');
+    const d = await r.json();
+    document.getElementById('h-sources').textContent = d.total_sources;
+    document.getElementById('h-docs').textContent = d.total_documents;
+    document.getElementById('h-chunks').textContent = d.total_chunks;
+    document.getElementById('h-runs').textContent = d.total_ingestion_runs;
+    const cards = document.querySelectorAll('.health-card');
+    cards.forEach(c => c.className = 'health-card ' + (d.status === 'healthy' ? 'ok' : ''));
+  } catch(e) {}
+}
+
+// ── Sources table ───────────────────────────────────────────────
+async function loadSources() {
+  const area = document.getElementById('sources-table');
+  try {
+    const r = await fetch('/api/admin/sources');
+    const sources = await r.json();
+    if (!sources.length) {
+      area.innerHTML = '<div style="color:var(--text-muted);padding:1rem">No sources registered yet. Add one above.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th></th><th>Name</th><th>Type</th><th>Path</th><th>Last Scan</th><th>Actions</th></tr></thead><tbody>';
+    sources.forEach(s => {
+      let extras = [];
+      if (s.network_user) extras.push('🔑 ' + s.network_user);
+      const info = extras.length ? '<br><small style="color:var(--text-muted);font-size:0.7rem">' + extras.join(' ') + '</small>' : '';
+      html += '<tr>' +
+        '<td>' + statusDot(s.last_status) + '</td>' +
+        '<td><strong>' + s.name + '</strong>' + info + '</td>' +
+        '<td>' + s.source_type.replace(/_/g, ' ') + '</td>' +
+        '<td style="font-family:monospace;font-size:0.73rem;color:var(--text-muted)">' + (s.path || '—') + '</td>' +
+        '<td style="font-size:0.73rem;color:var(--text-muted)">' + (s.last_indexed_at ? new Date(s.last_indexed_at).toLocaleString() : 'Never') + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn-sm primary" onclick="scanSource(\'' + s.id + '\')">Scan</button> ' +
+          '<button class="btn-sm outline" onclick="testSource(\'' + s.id + '\')">Test</button> ' +
+          '<button class="btn-sm" onclick="listSourceFiles(this, \'' + s.id + '\', \'' + escJs(s.name) + '\')">Files</button> ' +
+          '<button class="btn-sm" onclick="editSource(\'' + s.id + '\')">Edit</button> ' +
+          '<button class="btn-sm" onclick="toggleSource(\'' + s.id + '\')">' + (s.enabled ? 'Disable' : 'Enable') + '</button> ' +
+          '<button class="btn-sm danger" onclick="deleteSource(\'' + s.id + '\')">Del</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table>';
+    area.innerHTML = html;
+  } catch(e) {
+    area.innerHTML = '<div style="color:var(--danger);padding:1rem">Failed to load: ' + e.message + '</div>';
+  }
+}
+
+function escJs(v) { return (v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, "&#39;"); }
+
+// ── Per-source file listing ───────────────────────────────────────
+async function listSourceFiles(btn, id, name) {
+  // Close any open panel first
+  document.querySelectorAll('.files-panel.open').forEach(p => { p.classList.remove('open'); p.innerHTML = ''; });
+
+  const row = document.querySelector('#files-panel-' + id);
+  if (row) {
+    row.classList.toggle('open');
+    return;
+  }
+
+  // Create the panel directly under the clicked source's row
+  const tr = btn.closest('tr');
+  if (!tr || !tr.parentNode) return;
+  const panel = document.createElement('tr');
+  panel.id = 'files-panel-' + id;
+  panel.innerHTML = '<td colspan="6"><div class="files-panel open">' +
+    '<div class="fp-head"><strong>📄 Files — ' + escJs(name) + '</strong><small>Loading…</small></div>' +
+    '<div class="fp-body"><div class="fp-loading"><span class="loading-spinner"></span>Loading files…</div></div>' +
+    '</div></td>';
+  tr.parentNode.insertBefore(panel, tr.nextSibling);
+
+  try {
+    const r = await fetch('/api/admin/sources/' + id + '/documents');
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Failed'); }
+    const docs = await r.json();
+    renderFilesPanel(panel, docs);
+  } catch(e) {
+    panel.querySelector('.fp-head small').textContent = 'Error';
+    panel.querySelector('.fp-body').innerHTML = '<div class="fp-empty">Failed to load files: ' + e.message + '</div>';
+  }
+}
+
+function renderFilesPanel(panel, docs) {
+  const head = panel.querySelector('.fp-head small');
+  head.textContent = docs.length + ' file(s)';
+  const body = panel.querySelector('.fp-body');
+  if (!docs.length) {
+    body.innerHTML = '<div class="fp-empty">No files indexed for this source yet.</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th>Path</th></tr></thead><tbody>';
+  docs.forEach(d => {
+    const size = d.file_size_bytes != null ? (d.file_size_bytes / 1024).toFixed(1) + ' KB' : '—';
+    const mod = d.last_modified ? new Date(d.last_modified).toLocaleString() : '—';
+    html += '<tr>' +
+      '<td>' + escJs(d.file_name) + '</td>' +
+      '<td>' + escJs(d.file_type || '—') + '</td>' +
+      '<td>' + size + '</td>' +
+      '<td style="font-size:0.7rem;color:var(--text-muted)">' + mod + '</td>' +
+      '<td style="font-family:monospace;font-size:0.68rem;color:var(--text-subtle);word-break:break-all">' + escJs(d.file_path || '—') + '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+// ── Runs table ──────────────────────────────────────────────────
+async function loadRuns() {
+  const area = document.getElementById('runs-table');
+  try {
+    const r = await fetch('/api/admin/runs?limit=10');
+    const runs = await r.json();
+    if (!runs.length) {
+      area.innerHTML = '<div style="color:var(--text-muted);padding:1rem">No ingestion runs yet.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Source</th><th>Started</th><th>Discovered</th><th>Processed</th><th>Indexed</th><th>Progress</th><th>Status</th><th></th></tr></thead><tbody>';
+    runs.forEach(run => {
+      const total = run.documents_discovered || 0;
+      const done = run.documents_indexed || 0;
+      const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+      const running = run.status === 'running' || run.status === 'pending';
+      const progressCell = running
+        ? '<div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div><span class="progress-pct">' + (total > 0 ? pct + '%' : '…') + '</span></div>'
+        : '<span style="color:var(--text-subtle)">—</span>';
+      html += '<tr>' +
+        '<td style="font-size:0.73rem">' + run.source_id + '</td>' +
+        '<td style="font-size:0.73rem;color:var(--text-muted)">' + new Date(run.started_at).toLocaleString() + '</td>' +
+        '<td>' + run.documents_discovered + '</td>' +
+        '<td>' + run.documents_processed + '</td>' +
+        '<td>' + run.documents_indexed + '</td>' +
+        '<td>' + progressCell + '</td>' +
+        '<td>' + runStatusBadge(run.status) + '</td>' +
+        '<td><button class="btn-sm danger" onclick="deleteRun(\'' + run.id + '\', \'' + run.source_id + '\')" ' + (running ? 'disabled' : '') + '>Del</button></td>' +
+      '</tr>';
+    });
+    html += '</tbody></table>';
+    area.innerHTML = html;
+
+    // If any run is still in flight (e.g. started before this page loaded), resume polling
+    const inFlight = runs.find(r => r.status === 'running' || r.status === 'pending');
+    if (inFlight && !_scanPollTimer) startScanPolling(inFlight.id);
+  } catch(e) {
+    area.innerHTML = '<div style="color:var(--danger);padding:1rem">Failed to load: ' + e.message + '</div>';
+  }
+}
+
+// ── Source actions ──────────────────────────────────────────────
+async function addSource() {
+  const name = document.getElementById('src-name').value.trim();
+  const type = document.getElementById('src-type').value;
+  const path = document.getElementById('src-path').value.trim();
+  const netUser = document.getElementById('src-net-user').value.trim();
+  const netPass = document.getElementById('src-net-pass').value.trim();
+  const netDomain = document.getElementById('src-net-domain').value.trim();
+  if (!name) { showToast('Source name is required', 'error'); return; }
+
+  try {
+    const body = {
+      name: name,
+      source_type: type,
+      path: path,
+      scan_mode: document.getElementById('src-scan').value,
+      owner_email: document.getElementById('src-email').value.trim() || null,
+    };
+    if (netUser) body.network_user = netUser;
+    if (netPass) body.network_pass = netPass;
+    if (netDomain) body.network_domain = netDomain;
+
+    const r = await fetch('/api/admin/sources', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail); }
+    showToast('Source added');
+    document.getElementById('src-name').value = '';
+    document.getElementById('src-path').value = '';
+    document.getElementById('src-net-user').value = '';
+    document.getElementById('src-net-pass').value = '';
+    document.getElementById('src-net-domain').value = '';
+    document.getElementById('auth-section').classList.remove('open');
+    loadSources(); loadHealth();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function testNewSource() {
+  const name = document.getElementById('src-name').value.trim();
+  const path = document.getElementById('src-path').value.trim();
+  if (!path) { showToast('Enter a path first', 'error'); return; }
+
+  // Create the source first so we can test it
+  if (!name) document.getElementById('src-name').value = 'Test-' + Date.now();
+
+  try {
+    // Add source
+    const netUser = document.getElementById('src-net-user').value.trim();
+    const netPass = document.getElementById('src-net-pass').value.trim();
+    const netDomain = document.getElementById('src-net-domain').value.trim();
+    const body = {
+      name: document.getElementById('src-name').value.trim(),
+      source_type: document.getElementById('src-type').value,
+      path: path,
+      scan_mode: 'incremental',
+    };
+    if (netUser) body.network_user = netUser;
+    if (netPass) body.network_pass = netPass;
+    if (netDomain) body.network_domain = netDomain;
+
+    const r = await fetch('/api/admin/sources', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail); }
+    const src = await r.json();
+
+    // Test it
+    const tr = await fetch('/api/admin/sources/' + src.id + '/test', { method: 'POST' });
+    const td = await tr.json();
+    // Always clean up the temporary test source
+    await fetch('/api/admin/sources/' + src.id, { method: 'DELETE' });
+    if (td.success) {
+      showToast('Connected! Found ' + td.files_found + ' document(s). You can now add this source permanently.', 'success');
+    } else {
+      showToast('Connection failed: ' + td.detail, 'error');
+    }
+    loadSources(); loadHealth();
+  } catch(e) { showToast('Test failed: ' + e.message, 'error'); }
+}
+
+async function testSource(id) {
+  showToast('Testing connection...', 'info');
+  try {
+    const r = await fetch('/api/admin/sources/' + id + '/test', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Connected! Found ' + d.files_found + ' document(s).', 'success');
+    } else {
+      showToast('Connection failed: ' + d.detail, 'error');
+    }
+  } catch(e) { showToast('Test error: ' + e.message, 'error'); }
+}
+
+async function scanSource(id) {
+  showToast('Starting scan...', 'info');
+  try {
+    const r = await fetch('/api/admin/sources/' + id + '/scan', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail);
+    showScanProgress({ status: 'running', documents_discovered: 0, documents_indexed: 0 });
+    startScanPolling(d.run_id);
+    loadRuns();
+  } catch(e) { showToast('Scan failed: ' + e.message, 'error'); }
+}
+
+async function toggleSource(id) {
+  try {
+    const r = await fetch('/api/admin/sources/' + id + '/toggle', { method: 'PATCH' });
+    if (!r.ok) throw new Error((await r.json()).detail);
+    loadSources();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteSource(id) {
+  if (!confirm('Delete this source and its ingestion history?')) return;
+  try {
+    const r = await fetch('/api/admin/sources/' + id, { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json()).detail);
+    showToast('Source deleted');
+    loadSources(); loadRuns(); loadHealth();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// ── Clear / delete ──────────────────────────────────────────────
+async function clearAllData() {
+  showConfirm('Clear all ingested data?',
+    'This will permanently delete ALL documents, chunks, metadata, and ingestion history. Source configurations will be kept. Type <strong>DELETE</strong> to confirm.',
+    'DELETE',
+    async () => {
+      try {
+        const r = await fetch('/api/admin/data', { method: 'DELETE' });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail);
+        showToast('Cleared: ' + d.chroma_chunks_deleted + ' chunks, ' + d.documents_deleted + ' docs');
+        loadHealth(); loadSources(); loadRuns();
+      } catch(e) { showToast('Error: ' + e.message, 'error'); }
+    }
+  );
+}
+
+async function deleteRun(runId, sourceId) {
+  showConfirm('Delete this ingestion run?',
+    'This will delete run <strong>' + runId + '</strong> and all ingested data for source <strong>' + sourceId + '</strong>. This cannot be undone.',
+    null,
+    async () => {
+      try {
+        const r = await fetch('/api/admin/runs/' + runId, { method: 'DELETE' });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail);
+        showToast('Deleted: ' + d.documents_deleted + ' docs removed');
+        loadHealth(); loadSources(); loadRuns();
+      } catch(e) { showToast('Error: ' + e.message, 'error'); }
+    }
+  );
+}
+
+function showConfirm(title, message, requiredText, onConfirm) {
+  const existing = document.querySelector('.confirm-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  const needsInput = !!requiredText;
+  overlay.innerHTML = '<div class="confirm-box">' +
+    '<h3>' + title + '</h3>' +
+    '<p>' + message + '</p>' +
+    (needsInput ? '<input type="text" id="confirm-input" placeholder="Type ' + requiredText + '" autofocus>' : '') +
+    '<div class="confirm-actions">' +
+      '<button class="btn-cancel" id="confirm-cancel">Cancel</button>' +
+      '<button class="btn-danger" id="confirm-btn"' + (needsInput ? ' disabled' : '') + '>Confirm Delete</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    document.removeEventListener('keydown', escHandler);
+    overlay.remove();
+  };
+
+  function escHandler(e) { if (e.key === 'Escape') close(); }
+
+  overlay.querySelector('#confirm-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', escHandler);
+
+  if (needsInput) {
+    const input = overlay.querySelector('#confirm-input');
+    const btn = overlay.querySelector('#confirm-btn');
+    input.addEventListener('input', () => {
+      btn.disabled = input.value.trim() !== requiredText;
+    });
+  }
+
+  overlay.querySelector('#confirm-btn').addEventListener('click', () => {
+    close();
+    onConfirm();
+  });
+}
+
+// ── Init ────────────────────────────────────────────────────────
+function updatePathHint() {
+  const type = document.getElementById('src-type').value;
+  const hint = document.getElementById('path-hint');
+  if (type === 'network_share') {
+    hint.innerHTML = 'Any mounted network path — Windows UNC (<code>\\\\server\\share\\folder</code>), Linux GVFS (<code>/run/user/.../gvfs/...</code>), macOS (<code>/Volumes/share</code>). Credentials only needed if the share is not already mounted.';
+  } else {
+    hint.innerHTML = 'Any local filesystem path or mounted network drive — <code>/path/to/docs</code>, <code>C:\\path\\to\\docs</code>.';
+  }
+}
+
+// ── Edit source ─────────────────────────────────────────────────
+let _editSourceId = null;
+
+async function editSource(id) {
+  _editSourceId = id;
+  try {
+    const r = await fetch('/api/admin/sources/' + id);
+    const s = await r.json();
+    showEditModal(s);
+  } catch(e) { showToast('Failed to load source: ' + e.message, 'error'); }
+}
+
+function showEditModal(s) {
+  const existing = document.querySelector('.edit-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'edit-overlay';
+  const esc = (v) => (v || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  overlay.innerHTML = '<div class="edit-box">' +
+    '<h3>Edit: ' + esc(s.name) + '</h3>' +
+    '<div class="edit-row">' +
+      '<div class="form-group" style="flex:2"><label>Name</label><input type="text" id="ed-name" value="' + esc(s.name) + '"></div>' +
+      '<div class="form-group" style="max-width:130px"><label>Scan Mode</label><select id="ed-scan"><option value="incremental"' + (s.scan_mode === 'incremental' ? ' selected' : '') + '>Incremental</option><option value="full"' + (s.scan_mode === 'full' ? ' selected' : '') + '>Full</option></select></div>' +
+    '</div>' +
+    '<div class="edit-row">' +
+      '<div class="form-group" style="flex:1"><label>Path</label><input type="text" id="ed-path" value="' + esc(s.path || '') + '"></div>' +
+    '</div>' +
+    '<div class="edit-row">' +
+      '<div class="form-group" style="flex:1"><label>Network User</label><input type="text" id="ed-net-user" value="' + esc(s.network_user || '') + '" placeholder="DOMAIN\\user"></div>' +
+      '<div class="form-group" style="flex:1"><label>Network Password</label><input type="password" id="ed-net-pass" placeholder="Leave empty to keep"></div>' +
+      '<div class="form-group" style="max-width:130px"><label>Domain</label><input type="text" id="ed-net-domain" value="' + esc(s.network_domain || '') + '"></div>' +
+    '</div>' +
+    '<div class="edit-row">' +
+      '<div class="form-group" style="max-width:230px"><label>Owner Email</label><input type="email" id="ed-email" value="' + esc(s.owner_email || '') + '"></div>' +
+    '</div>' +
+    '<div class="edit-actions">' +
+      '<button class="btn-cancel" id="edit-cancel">Cancel</button>' +
+      '<button class="btn-primary" id="edit-save" onclick="saveSource()">Save Changes</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    document.removeEventListener('keydown', escH);
+    overlay.remove();
+    _editSourceId = null;
+  };
+  function escH(e) { if (e.key === 'Escape') close(); }
+  overlay.querySelector('#edit-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', escH);
+}
+
+async function saveSource() {
+  if (!_editSourceId) return;
+  const body = {};
+  const name = document.getElementById('ed-name').value.trim();
+  if (name) body.name = name;
+  body.path = document.getElementById('ed-path').value.trim();
+  body.scan_mode = document.getElementById('ed-scan').value;
+  body.owner_email = document.getElementById('ed-email').value.trim() || null;
+  body.network_user = document.getElementById('ed-net-user').value.trim();
+  const pass = document.getElementById('ed-net-pass').value.trim();
+  if (pass) body.network_pass = pass;
+  body.network_domain = document.getElementById('ed-net-domain').value.trim();
+
+  try {
+    const r = await fetch('/api/admin/sources/' + _editSourceId, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail); }
+    showToast('Source updated');
+    const overlay = document.querySelector('.edit-overlay');
+    if (overlay) overlay.remove();
+    _editSourceId = null;
+    loadSources(); loadHealth();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+loadHealth();
+loadSources();
+loadRuns();
+updatePathHint();
+</script>
+</body>
+</html>
