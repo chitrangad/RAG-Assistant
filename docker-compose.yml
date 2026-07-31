@@ -1,15 +1,21 @@
 # ── Project Knowledge Assistant — Docker Compose ───────────────────
 # Usage:
-#   docker compose up -d --build     # build + start
+#   docker compose up -d --build     # build locally + start
+#   docker compose up -d             # pull pre-built image from GHCR + start
 #   docker compose logs -f           # follow logs
 #   docker compose down              # stop (data persists in ./data)
 #
 # Data (SQLite catalog + ChromaDB + uploads) persists on the host in ./data.
+#
+# The pre-built image is published to ghcr.io/chitrangad/rag-assistant by
+# .github/workflows/docker-publish.yml on every push to main and on v* tags.
+# Keeping `build: .` means local `--build` still works (and tags the image
+# with the GHCR name, matching what CI publishes).
 
 services:
   rag-assistant:
     build: .
-    image: rag-assistant:latest
+    image: ghcr.io/chitrangad/rag-assistant:latest
     container_name: rag-assistant
     restart: unless-stopped
     ports:

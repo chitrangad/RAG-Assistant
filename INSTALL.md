@@ -258,9 +258,17 @@ docker build -t rag-assistant:latest .
 docker run -p 8000:8000 -v "$PWD/data:/app/data" rag-assistant:latest
 ```
 
-### 7.4 Roadmap — pre-built image on a registry
+### 7.4 Pre-built image on GitHub Container Registry (GHCR)
 
-A future release will publish a **pre-built image** (e.g. `ghcr.io/chitrangad/rag-assistant:latest`) so deployments skip the local build entirely:
+A **pre-built image** is published automatically to `ghcr.io/chitrangad/rag-assistant` by the GitHub Actions workflow `.github/workflows/docker-publish.yml`. It runs the test suite, builds the image, and pushes on every push to `main` and on `v*` tags:
+
+| Tag | Trigger |
+|-----|---------|
+| `latest` | latest `main` |
+| `vX.Y.Z` (e.g. `v0.1.0` → `0.1.0`) | semver release tags |
+| `sha-<short>` | every build |
+
+Deployments can then **skip the local build entirely** — just pull the image:
 
 ```yaml
 services:
@@ -275,6 +283,12 @@ services:
       - PORT=8000
     restart: unless-stopped
 ```
+
+```bash
+docker compose up -d          # pulls the pre-built image — no local build
+```
+
+> **GHCR access:** packages are **private by default** after the first CI push. To allow unauthenticated pulls (the flow above), open the package settings — `github.com/users/chitrangad/packages/container/package/rag-assistant` → **Package settings** → **Danger Zone** → *Change visibility* → **Public**. Alternatively keep it private and `docker login ghcr.io` on each machine with a token that has `read:packages`.
 
 Benefits: reproducible installs, no Python/venv management on the target machine, easier server/hosted deployment.
 
