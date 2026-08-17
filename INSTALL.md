@@ -82,7 +82,7 @@ All settings have sensible defaults (see `src/config.py`). Override via a `.env`
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Bind address |
+| `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8000` | Port |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/catalog.db` | Catalog DB |
 | `CHROMA_PERSIST_DIR` | `./data/chroma` | Vector store |
@@ -97,7 +97,7 @@ All settings have sensible defaults (see `src/config.py`). Override via a `.env`
 ### 4.1 Quick start (development / single laptop)
 
 ```bash
-.venv/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000
+.venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
 
 Then open:
@@ -119,7 +119,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/USER/RAG-Assistant   # <-- replace USER with the real username
-ExecStart=/home/USER/RAG-Assistant/.venv/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000
+ExecStart=/home/USER/RAG-Assistant/.venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=3
 Environment=LOG_LEVEL=INFO

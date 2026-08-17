@@ -9,6 +9,11 @@ __pycache__/
 # Data (credentials, SQLite catalog, ChromaDB, uploads)
 data/
 
+# Internal project docs (kept on disk, not published)
+PROGRESS.md
+specs.md
+prompt.txt
+
 # Local docs pack (keep on disk, not in git)
 project_knowledge_assistant_updated_documentation_pack.zip
 

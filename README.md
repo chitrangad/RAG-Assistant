@@ -90,7 +90,7 @@ chmod 600 data/.credentials
 ### 4. Run the server
 
 ```bash
-.venv/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000
+.venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
 
 - Query page: **http://127.0.0.1:8000**
@@ -152,7 +152,7 @@ All settings have defaults (see `src/config.py`); override via environment varia
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Bind address |
+| `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8000` | Port |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/catalog.db` | Catalog DB |
 | `CHROMA_PERSIST_DIR` | `./data/chroma` | Vector store location |
@@ -172,7 +172,11 @@ All settings have defaults (see `src/config.py`); override via environment varia
 
 ## Project Status
 
-See [`PROGRESS.md`](PROGRESS.md) for the live checkpoint: working features, the admin API (Bucket 4), the browser extension (Bucket 5), known gaps (Bucket 3 confidence scoring/citations, SMB connector tests), and how to restart the server.
+**Verified live on 2026-08-17:** 36/36 tests passing; server running on `0.0.0.0:8000`; 59/59 documents from the `omv` network share re-indexed in ~22 s (246 chunks, zero errors); semantic search, catalog listing, live scan progress, and the full admin API confirmed working end-to-end.
+
+Working features: the admin API (Bucket 4), the browser extension (Bucket 5), multi-source ingestion, live ingestion progress, catalog listing, Docker deployment + GHCR publishing.
+
+Known gaps: Bucket 3 confidence scoring / formal citations (FR-008), insufficient-evidence enforcement (FR-009), admin metadata enrichment (FR-012), extension live calibration, and SMB connector tests.
 
 ### Deployment options
 
