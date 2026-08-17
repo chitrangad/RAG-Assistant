@@ -1,114 +1,66 @@
 # Installation & Deployment Guide
 
-This guide walks through installing and deploying the Project Knowledge Assistant on a laptop or server, and distributing the browser extension.
+This guide covers installing and deploying the **RAG Knowledge Assistant** — a local-first retrieval-augmented assistant that answers questions from your documents. Everything runs on your machine; documents and queries never leave it (an external AI API is optional and opt-in).
 
-- **Version:** 0.1.0
-- **Stack:** Python 3.11+ (FastAPI), SQLite, ChromaDB, local embedding model, Manifest V3 browser extension
+- **Stack:** Python 3.11+ (FastAPI), SQLite, ChromaDB, local embedding model, local answer LLM (Qwen3-1.7B)
 - **Deployment model:** Local-first. No cloud services required.
 
----
+There are **two supported deployment methods**:
 
-## 1. Prerequisites
-
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Python | 3.11+ | Tested on 3.12 |
-| pip | modern | Included with Python |
-| Chrome / Edge | — | Only needed for the browser extension |
-| Disk space | ~2 GB | 1.3 GB for the Python/ML stack + ~80 MB embedding model |
-| RAM | 4 GB+ | Embedding model loads into memory at first use |
-
-Optional but recommended:
-
-- `git` — to clone the repository
-- A mounted network share (GVFS/UNC/NFS) or local folder to ingest
+| Method | When to use | How |
+|--------|-------------|-----|
+| **[A. Bare metal](#method-a-bare-metal-installsh)** | Single laptop / server, want direct control, no Docker | One `install.sh` script |
+| **[B. Docker Compose](#method-b-docker-compose-pre-built-image)** | Any machine with Docker, reproducible, low-maintenance | `docker compose up -d` (pre-built GHCR image) |
 
 ---
 
-## 2. Install the Backend
+## Prerequisites
 
-### 2.1 Get the code
+| Requirement | Version / size | Notes |
+|-------------|----------------|-------|
+| Python (Method A only) | 3.11+ | Tested on 3.12 |
+| Docker + Compose v2 (Method B only) | recent | `docker compose` plugin required |
+| Disk space | ~4 GB | Python/ML stack + ~80 MB embedding model + ~1.1 GB answer LLM |
+| RAM | 8 GB+ | Embedding model + answer LLM both load into memory |
+
+---
+
+## Method A: Bare metal (`install.sh`)
+
+A single script creates the virtualenv, installs all dependencies (CPU-only PyTorch, llama-cpp-python from a prebuilt wheel, and the app), downloads the answer LLM, and creates the admin account.
 
 ```bash
 git clone https://github.com/chitrangad/RAG-Assistant.git
 cd RAG-Assistant
+
+./install.sh                       # interactive: prompts for the admin password
+# or, non-interactive:
+#   ADMIN_PASSWORD=your-strong-password ./install.sh
+# skip the ~1.1 GB model download:
+#   SKIP_MODEL=1 ./install.sh
 ```
 
-### 2.2 Create a virtual environment
+What it does:
+
+1. Checks for Python 3.11+.
+2. Creates `.venv` and installs CPU-only PyTorch → llama-cpp-python (prebuilt CPU wheel) → the app.
+3. Creates `data/` (SQLite + ChromaDB + uploads + models).
+4. Downloads **Qwen3-1.7B** (unless `SKIP_MODEL=1`).
+5. Creates `data/.credentials` for the admin user.
+
+Environment overrides: `PYTHON`, `VENV_DIR`, `DATA_DIR`, `ADMIN_USER`, `ADMIN_PASSWORD`, `SKIP_MODEL`, `PORT`.
+
+### Run it
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate        # Linux/macOS
-# .venv\Scripts\activate         # Windows
+.venv/bin/python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
-
-### 2.3 Install dependencies
-
-```bash
-pip install -e ".[dev]"
-```
-
-This installs the runtime stack (FastAPI, SQLAlchemy, ChromaDB, sentence-transformers, PyMuPDF, python-docx) and the dev/test tools.
-
-> **First run note:** the `all-MiniLM-L6-v2` embedding model (~80 MB) downloads from Hugging Face the first time you ingest a document. Offline installs must pre-cache it (`python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"`).
-
-### 2.4 Verify the install
-
-```bash
-.venv/bin/python3 -m pytest tests/ -q
-```
-
-Expect **36 passed**.
-
----
-
-## 3. Configuration
-
-### 3.1 Admin credentials
-
-The admin dashboard is protected by a file-based credential store (`data/.credentials`). Create the first admin user:
-
-```bash
-mkdir -p data
-.venv/bin/python3 -c "from src.auth import generate_credential_line; print(generate_credential_line('admin', 'your-strong-password'))" > data/.credentials
-chmod 600 data/.credentials
-```
-
-Add more users by appending more `username:hash` lines.
-
-### 3.2 Environment variables (optional)
-
-All settings have sensible defaults (see `src/config.py`). Override via a `.env` file in the project root or environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOST` | `0.0.0.0` | Bind address |
-| `PORT` | `8000` | Port |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/catalog.db` | Catalog DB |
-| `CHROMA_PERSIST_DIR` | `./data/chroma` | Vector store |
-| `CHUNK_SIZE` | `1000` | Chunk size (chars) |
-| `CHUNK_OVERLAP` | `200` | Chunk overlap (chars) |
-| `LOG_LEVEL` | `INFO` | Logging |
-
----
-
-## 4. Run the Backend
-
-### 4.1 Quick start (development / single laptop)
-
-```bash
-.venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
-```
-
-Then open:
 
 - Query page: `http://127.0.0.1:8000`
 - Admin dashboard: `http://127.0.0.1:8000/admin`
 - API docs: `http://127.0.0.1:8000/docs`
 
-### 4.2 Production-style run (systemd — Linux)
-
-For a machine that should always have the assistant running (e.g. a work laptop or small server), install a user systemd service:
+### Keep it running (systemd)
 
 ```ini
 # ~/.config/systemd/user/rag-assistant.service
@@ -118,8 +70,8 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/USER/RAG-Assistant   # <-- replace USER with the real username
-ExecStart=/home/USER/RAG-Assistant/.venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=/home/USER/RAG-Assistant   # ← where data/ lives
+ExecStart=/home/USER/RAG-Assistant/.venv/bin/python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=3
 Environment=LOG_LEVEL=INFO
@@ -134,169 +86,160 @@ systemctl --user enable --now rag-assistant
 systemctl --user status rag-assistant
 ```
 
-### 4.3 Expose beyond localhost (optional)
+### Manual install (reference)
 
-To let other machines on the LAN reach the backend (needed if the extension points at a shared server):
+`install.sh` automates this, but the steps are:
 
 ```bash
-.venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+python3 -m venv .venv
+.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch
+.venv/bin/pip install "llama-cpp-python>=0.3.35" \
+  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+.venv/bin/pip install .
 ```
 
-> **Security:** the query API is public by design; the admin API requires the session cookie. Do not expose `0.0.0.0` to the public internet without a reverse proxy + TLS (e.g. Caddy/nginx).
-
 ---
 
-## 5. Load Content (Ingestion)
+## Method B: Docker Compose (pre-built image)
 
-1. Open **Admin** → **Add Data Source**.
-2. Choose **Network Share** (any mounted path — GVFS, UNC, `/Volumes`) or **Local Folder**.
-3. Enter the path; click **Test** to verify connectivity.
-4. Click **Scan** — ingestion runs in the background with a live progress bar in the UI.
-5. Query the content at `/`.
-
-Sources are stored in `data/catalog.db`; the index lives in `data/chroma`. Both are git-ignored and safe to back up by copying the `data/` directory.
-
----
-
-## 6. Deploy the Browser Extension
-
-The extension is a **Manifest V3** Chrome/Edge extension in the `extension/` directory. It intercepts queries in AI chat pages (Copilot, Gemini, ChatGPT, Claude), calls the local backend, and injects a grounding prompt.
-
-### 6.1 Load it (developer mode — personal use)
-
-1. Open `chrome://extensions` (or `edge://extensions`).
-2. Toggle **Developer mode** on (top-right).
-3. Click **Load unpacked**.
-4. Select the `extension/` folder inside the project.
-5. Pin the extension icon to the toolbar.
-
-> Icons are git-ignored; if the badge icon is missing, generate it: `python3 extension/generate_icons.py`.
-
-### 6.2 Configure it
-
-Click the extension icon → popup:
-
-- **AI Provider** — Auto-detect (recommended) or force one.
-- **Backend URL** — default `http://localhost:8000`. Change this if the backend runs on another machine (`http://192.168.x.x:8000`).
-- **Enable/Disable** — toggle grounding on/off.
-
-### 6.3 Package it for distribution (work laptops / team)
-
-To distribute to a team without "Developer mode":
-
-**Option A — ZIP (load unpacked on each machine):**
+A pre-built image is published to **GitHub Container Registry (GHCR)** at `ghcr.io/chitrangad/rag-assistant` (see [§Image hosting](#image-hosting)). Deploy with no local build:
 
 ```bash
-cd extension
-zip -r ../rag-extension.zip . -x "icons/icon*.png"
-# recipient: chrome://extensions → Developer mode → Load unpacked → unzip → select folder
-```
-
-**Option B — CRX (packed, Chrome Web Store style):**
-
-1. `chrome://extensions` → Developer mode → **Pack extension**.
-2. Select the `extension/` folder.
-3. Chrome produces a `.crx` (installable by dragging into `chrome://extensions`) and a `.pem` private key (keep safe — needed for signed updates).
-4. For organization-wide install, publish the CRX to the **Chrome Web Store** or distribute via policy (ADMX/GPO or MDM).
-
-### 6.4 Supported providers
-
-| Provider | URL | Status |
-|----------|-----|--------|
-| Google Gemini | `gemini.google.com` | Tested |
-| ChatGPT | `chat.openai.com`, `chatgpt.com` | Tested |
-| Microsoft Copilot | `*.cloud.microsoft`, `copilot.microsoft.com`, `bing.com/chat` | Best-effort selectors |
-| Anthropic Claude | `claude.ai` | Best-effort selectors |
-
-> Provider DOM selectors may need recalibration if an AI service updates its UI. Use `extension/diagnose.js` in the DevTools console to re-detect selectors.
-
-### 6.5 Verify end-to-end
-
-1. Start the backend (section 4).
-2. Ingest some content (section 5).
-3. Open `https://chatgpt.com`, type *"list all the project documents"*.
-4. The badge turns blue and the prompt is injected with the folder catalog; the AI answers from your documents.
-
----
-
-## 7. Docker Deployment
-
-Containerized deployment is supported: **`Dockerfile`** + **`docker-compose.yml`** in the repo root.
-
-The image:
-- Installs the CPU-only PyTorch build (keeps the image lean — no multi-GB CUDA deps)
-- **Pre-caches the embedding model (`all-MiniLM-L6-v2`) at build time** — the container ingests and queries fully offline
-- Persists everything in the bind-mounted `./data` directory (SQLite catalog + ChromaDB + uploads)
-
-### 7.1 Build & run
-
-> **Requires Docker with the Compose v2 plugin (`docker compose`).** The legacy standalone `docker-compose` v1 is not supported.
-
-```bash
+git clone https://github.com/chitrangad/RAG-Assistant.git
 cd RAG-Assistant
-cp -r <your existing data> ./data    # optional: migrate an existing install's data/
-docker compose up -d --build
+
+cp .env.example .env     # optional: change PORT, DATA_DIR, network-share path
+docker compose up -d     # pulls the pre-built image and starts
 ```
 
 - Query page: `http://127.0.0.1:8000`
-- Admin: `http://127.0.0.1:8000/admin`
-- Logs: `docker compose logs -f` · Stop: `docker compose down` (data is kept in `./data`)
+- Logs: `docker compose logs -f`
+- Stop: `docker compose down` (data persists in the host data directory)
 
-> The container runs as **root** so the host-mounted `./data` is always writable regardless of host UID (see the Dockerfile comment for a stricter non-root option).
+### Persistent data
 
-### 7.2 Fresh start
-
-```bash
-docker compose down
-docker compose up -d --build
-```
-
-### 7.3 Manual build (no compose)
-
-```bash
-docker build -t rag-assistant:latest .
-docker run -p 8000:8000 -v "$PWD/data:/app/data" rag-assistant:latest
-```
-
-### 7.4 Pre-built image on GitHub Container Registry (GHCR)
-
-A **pre-built image** is published automatically to `ghcr.io/chitrangad/rag-assistant` by the GitHub Actions workflow `.github/workflows/docker-publish.yml`. It runs the test suite, builds the image, and pushes on every push to `main` and on `v*` tags:
-
-| Tag | Trigger |
-|-----|---------|
-| `latest` | latest `main` |
-| `vX.Y.Z` (e.g. `v0.1.0` → `0.1.0`) | semver release tags |
-| `sha-<short>` | every build |
-
-Deployments can then **skip the local build entirely** — just pull the image:
+`docker-compose.yml` bind-mounts the host data directory into the container:
 
 ```yaml
-services:
-  rag-assistant:
-    image: ghcr.io/chitrangad/rag-assistant:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data          # SQLite + ChromaDB persistence
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-    restart: unless-stopped
+volumes:
+  - "${DATA_DIR:-./data}:/app/data"
 ```
+
+This holds SQLite (`catalog.db`), ChromaDB, uploads, LLM settings, and the answer model (`<DATA_DIR>/models`). Back up by copying that directory.
+
+### Change the port
+
+Set `PORT` in `.env`:
 
 ```bash
-docker compose up -d          # pulls the pre-built image — no local build
+# .env
+PORT=8080
 ```
 
-> **GHCR access:** packages are **private by default** after the first CI push. To allow unauthenticated pulls (the flow above), open the package settings — `github.com/users/chitrangad/packages/container/package/rag-assistant` → **Package settings** → **Danger Zone** → *Change visibility* → **Public**. Alternatively keep it private and `docker login ghcr.io` on each machine with a token that has `read:packages`.
+The host port changes; the container keeps listening on 8000 internally. `docker compose up -d` re-applies the mapping.
 
-Benefits: reproducible installs, no Python/venv management on the target machine, easier server/hosted deployment.
+### Network shares / local folders
+
+The container only sees host paths you bind-mount. Mount your document share at the **same path** you'll enter in **Admin → Add Source**:
+
+```yaml
+volumes:
+  - "/mnt/omv-share:/mnt/omv-share:ro"
+```
+
+> **GVFS auto-mounts** (`/run/user/UID/gvfs/smb-share:server=…,share=…`) contain a colon that breaks the `host:container` syntax. Mount the share at a clean path on the host first — e.g. `mount -t cifs //server/share /mnt/omv-share` — then bind that clean path here (uncomment the `NETWORK_SHARE_PATH` line in `docker-compose.yml` and set it in `.env`).
+
+### Download the answer LLM (Docker)
+
+The ~1.1 GB Qwen3-1.7B model is **not** baked into the image (keeps it lean). Download it into the host data directory once:
+
+```bash
+mkdir -p data/models
+curl -L -o data/models/qwen3-1.7b-instruct.Q4_K_M.gguf \
+  "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf"
+```
+
+Then in **Admin → AI Answer Engine**, confirm the model path is `./data/models/qwen3-1.7b-instruct.Q4_K_M.gguf` and click **Test Provider**. Until it's present, answers fall back to evidence-only.
+
+### Building the image locally (optional)
+
+```bash
+docker build -t ghcr.io/chitrangad/rag-assistant:latest .
+docker compose up -d
+```
 
 ---
 
-## 8. Backup & Restore
+## Image hosting
 
-Everything that matters lives in `data/`:
+The pre-built image is published to **GitHub Container Registry (GHCR)** — chosen over Docker Hub (anonymous-pull rate limits) and LinuxServer.io (a curated team's registry, not a self-publish target).
+
+- Workflow: `.github/workflows/docker-publish.yml` runs the test suite, builds, and pushes on every push to `main` and on `v*` tags.
+- Tags: `latest` (main), `vX.Y.Z` (semver), `sha-<short>` (every build).
+- **GHCR visibility:** packages are private by default after the first CI push. For unauthenticated `docker compose up -d` pulls, open the package settings — `github.com/users/chitrangad/packages/container/package/rag-assistant` → **Package settings** → *Change visibility* → **Public**. (Or keep it private and `docker login ghcr.io` with a `read:packages` token.)
+
+---
+
+## Post-deploy: admin account & content
+
+### Admin credentials
+
+`install.sh` creates the admin account automatically. To do it manually (or add users):
+
+```bash
+mkdir -p data
+.venv/bin/python -c "from src.auth import generate_credential_line; print(generate_credential_line('admin', 'your-strong-password'))" > data/.credentials
+chmod 600 data/.credentials
+```
+
+Append more `username:hash` lines to add users.
+
+### Ingest content
+
+1. Open **Admin** → **Add Data Source**.
+2. Choose **Network Share** (mounted path) or **Local Folder**.
+3. Enter the path; click **Test**, then **Scan**. Ingestion runs in the background with live progress.
+
+---
+
+## Configuration reference
+
+Settings default sensibly (see `src/config.py`). Override via environment variables or a `.env` file:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `0.0.0.0` | Bind address |
+| `PORT` | `8000` | Port |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/catalog.db` | Catalog DB |
+| `CHROMA_PERSIST_DIR` | `./data/chroma` | Vector store |
+| `CHUNK_SIZE` | `1000` | Chunk size (chars) |
+| `CHUNK_OVERLAP` | `200` | Chunk overlap (chars) |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins (or `*`) |
+| `SESSION_TTL_HOURS` | `8` | Admin session cookie lifetime |
+
+Answer-engine settings (provider, model path, context, temperature, external API base URL / key / model, minimum relevance score) are managed at runtime via **Admin → AI Answer Engine** and persisted to `data/llm_settings.json` — no environment variables needed.
+
+---
+
+## Answer Engine (AI)
+
+Two backends, selected in **Admin → AI Answer Engine**:
+
+- **Local (default)** — Qwen3-1.7B via llama-cpp-python. Fully offline; no API key.
+- **External** — any OpenAI-compatible `/chat/completions` API (OpenAI, Ollama, LM Studio, vLLM, …).
+
+If no evidence clears the **minimum relevance score**, the assistant replies *"I do not have enough evidence to answer this question"* rather than guessing.
+
+### Configure an external API (optional)
+
+In **Admin → AI Answer Engine**: set **Provider → External API**, enter **Base URL** (e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1`), **API Key** (stored in `data/llm_settings.json`, git-ignored), and **Model**. Click **Save**, then **Test Provider**.
+
+---
+
+## Backup & Restore
+
+Everything that matters lives in the data directory:
 
 ```bash
 # Backup (stop the service first for a consistent copy)
@@ -308,13 +251,15 @@ tar xzf rag-backup.tar.gz
 
 ---
 
-## 9. Troubleshooting
+## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| `No documents indexed` on query | Ingest content first (section 5) |
-| Extension badge shows red / error | Backend not running, or `Backend URL` wrong in popup |
-| Extension badge stays gray | Query classified as unrelated, or no evidence ≥ 30% match |
-| Model download fails on first ingest | Pre-cache the model (section 2.3) or retry with internet access |
-| Admin login fails | Recreate `data/.credentials` with `generate_credential_line` (section 3.1) |
-| Port 8000 in use | Set `PORT` env var, or edit the systemd `ExecStart` |
+| `No documents indexed` on query | Ingest content first (see Post-deploy) |
+| Answers show only evidence, no natural-language answer | Local model missing — download it (Method A/B model step), or set an external API |
+| `Test Provider` fails on local model | Check the model path in Admin → AI Answer Engine and that `llama-cpp-python` installed |
+| `Test Provider` fails on external API | Check base URL, API key, and model name; ensure the endpoint is reachable |
+| Query returns "insufficient evidence" too often | Lower the minimum relevance score in Admin → AI Answer Engine |
+| Admin login fails | Recreate `data/.credentials` with `generate_credential_line` |
+| Port in use | Set `PORT` (bare metal: `--port`; Docker: `.env`) |
+| Container can't see a share | Bind-mount the share in `docker-compose.yml` (see Network shares) |

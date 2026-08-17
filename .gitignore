@@ -6,6 +6,9 @@ __pycache__/
 # Virtual env
 .venv/
 
+# Local environment (may contain secrets — .env.example is tracked)
+.env
+
 # Data (credentials, SQLite catalog, ChromaDB, uploads)
 data/
 
@@ -24,9 +27,6 @@ project_knowledge_assistant_updated_documentation_pack.zip
 # IDE
 .vscode/
 .idea/
-
-# Browser Extension (generated assets)
-extension/icons/icon*.png
 
 # OS
 .DS_Store

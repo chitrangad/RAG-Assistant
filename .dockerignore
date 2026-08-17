@@ -21,8 +21,7 @@ __pycache__/
 *.log
 *.db
 
-# Browser extension is a separate deliverable — not needed in the image
-extension/
+# Sample docs are not needed in the image
 sample_docs/
 
 # Docs / scratch not needed at runtime

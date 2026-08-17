@@ -22,9 +22,15 @@ dependencies = [
     "PyMuPDF>=1.23.0",
     "python-docx>=1.1.0",
     "python-multipart>=0.0.9",  # required for admin login Form(...) parsing
+    "httpx>=0.28.0",  # external OpenAI-compatible LLM provider
 ]
 
 [project.optional-dependencies]
+llm = [
+    # Local answer LLM (llama.cpp). Install with the CPU wheel index:
+    #   pip install -e ".[llm]" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+    "llama-cpp-python>=0.3.35",
+]
 dev = [
     "pytest>=9.1.0",
     "pytest-asyncio>=1.4.0",
@@ -38,3 +44,6 @@ testpaths = ["tests"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.setuptools.package-data]
+src = ["templates/*.html"]

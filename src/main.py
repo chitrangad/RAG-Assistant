@@ -14,7 +14,7 @@ from src.middleware.request_id import RequestIDMiddleware
 from src.middleware.logging import LoggingMiddleware
 from src.middleware.error_handler import ErrorHandlerMiddleware
 from src.api.router import api_router
-from src.auth import require_admin_page, authenticate_and_login, create_session_token
+from src.auth import require_admin_page, authenticate_and_login
 
 logger = get_logger(__name__)
 
@@ -43,6 +43,7 @@ async def lifespan(app: FastAPI):
     logger.info("starting", app=settings.app_name, version=settings.app_version)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    settings.models_dir.mkdir(parents=True, exist_ok=True)
     await init_db()
     logger.info("database_initialized")
     yield
@@ -59,9 +60,13 @@ app = FastAPI(
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RequestIDMiddleware)
+_cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+if not _cors_origins or "*" in _cors_origins:
+    _cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -115,7 +120,7 @@ async def admin_login(
         value=token,
         httponly=True,
         samesite="lax",
-        max_age=28800,  # 8 hours
+        max_age=settings.session_ttl_hours * 3600,
     )
     return response
 

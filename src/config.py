@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # Security
+    cors_origins: str = "*"  # comma-separated list of allowed origins, or "*"
+    session_ttl_hours: int = 8  # admin session cookie lifetime
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/catalog.db"
     database_echo: bool = False
@@ -34,9 +38,13 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
 
+    # Answer engine — see src/llm/settings.py for the admin-editable defaults.
+    # These are startup defaults only; runtime values persist in data/llm_settings.json.
+
     # Paths
     data_dir: Path = Path("./data")
     upload_dir: Path = Path("./data/uploads")
+    models_dir: Path = Path("./data/models")
 
     def db_path(self) -> Path:
         """Extract the file path from the database URL."""

@@ -61,6 +61,28 @@ async def test_listing_query_returns_folders(client, setup_db):
 
 
 @pytest.mark.asyncio
+async def test_listing_query_returns_documents(client, setup_db):
+    """'list all documents' also returns a flat document list with link ids."""
+    await _seed_docs({"/share/project-alpha": 2, "/share/project-beta": 1})
+
+    r = await client.post(
+        "/api/chat/query",
+        json={"question": "Show all documents in the repo"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["intent"] == "listing"
+    docs = data["documents"]
+    assert len(docs) == 3
+    names = sorted(d["file_name"] for d in docs)
+    assert names == ["project-alpha_0.txt", "project-alpha_1.txt", "project-beta_0.txt"]
+    for d in docs:
+        assert d["document_id"]
+        assert d["folder"] in {"/share/project-alpha", "/share/project-beta"}
+        assert d["source"] == "seed-source"
+
+
+@pytest.mark.asyncio
 async def test_listing_query_empty_catalog(client, setup_db):
     """Listing with no documents returns an empty folder list (200, not 404)."""
     r = await client.post(

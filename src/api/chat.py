@@ -7,6 +7,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from src.ingestion.chroma_store import ChromaVectorStore
+from src.llm.factory import get_llm
+from src.llm.settings import load_settings
+from src.llm.prompts import (
+    INSUFFICIENT_EVIDENCE_ANSWER,
+    SYSTEM_PROMPT,
+    build_grounding_prompt,
+)
 from src.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -47,6 +54,7 @@ class QueryRequest(BaseModel):
 
 class EvidenceChunk(BaseModel):
     document_name: str
+    document_id: str = ""
     file_type: str
     file_path: str = ""
     chunk_content: str
@@ -64,12 +72,40 @@ class FolderInfo(BaseModel):
     sources: list[str] = Field(default_factory=list)
 
 
+class RepoDocument(BaseModel):
+    """A single indexed document, for the catalog-listing intent.
+
+    ``document_id`` is the key for ``GET /api/documents/{id}`` (open/download).
+    """
+
+    document_id: str
+    file_name: str
+    folder: str
+    file_type: str
+    file_size_bytes: int | None = None
+    source: str = ""
+
+
 class QueryResponse(BaseModel):
     question: str
     intent: str = Field(default="semantic", description="semantic | listing")
     results: list[EvidenceChunk]
     folders: list[FolderInfo] = Field(default_factory=list)
+    documents: list[RepoDocument] = Field(
+        default_factory=list,
+        description="Flat document list for catalog-listing intent",
+    )
     total_chunks_searched: int
+    answer: str | None = Field(
+        default=None, description="Natural-language answer synthesized from evidence"
+    )
+    citations: list[str] = Field(
+        default_factory=list, description="Source document names cited in the answer"
+    )
+    insufficient_evidence: bool = Field(
+        default=False,
+        description="True when evidence was too weak; answer is the FR-009 fallback",
+    )
 
 
 # ── Catalog listing (intent detection for "list all documents") ──────
@@ -77,11 +113,13 @@ class QueryResponse(BaseModel):
 # Phrases that signal a request to enumerate the document catalog.
 _LISTING_PATTERNS = [
     r"list\s+(?:all\s+|the\s+|a\s+|any\s+|project\s+|available\s+|indexed\s+)*(?:documents?|files?|docs)",
-    r"(?:show|display|enumerate)\s+(?:me\s+)?(?:all\s+|the\s+)*(?:documents?|files?)",
-    r"what\s+(?:documents?|files?)\s+(?:do\s+we\s+have|are\s+(?:there|available|indexed)|exist)",
-    r"which\s+(?:documents?|files?)\s+(?:do\s+we\s+have|are\s+(?:there|available|indexed)|exist)",
-    r"all\s+(?:the\s+)?(?:documents?|files?)\s+in\s+(?:the\s+)?(?:repository|index|system|catalog)",
+    r"(?:show|display|enumerate)\s+(?:me\s+)?(?:all\s+|the\s+|available\s+)*(?:documents?|files?)",
+    r"(?:list|show)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?(?:documents?|files?)\s+in\s+(?:the\s+)?(?:repo|repository)",
+    r"what\s+(?:documents?|files?)\s+(?:do\s+we\s+have|are\s+(?:there|available|indexed|in\s+the\s+repo)|exist)",
+    r"which\s+(?:documents?|files?)\s+(?:do\s+we\s+have|are\s+(?:there|available|indexed|in\s+the\s+repo)|exist)",
+    r"all\s+(?:the\s+)?(?:documents?|files?)\s+in\s+(?:the\s+)?(?:repository|index|system|catalog|repo)",
     r"(?:catalog|inventory)\s+of\s+(?:all\s+|the\s+)?(?:documents?|files?)",
+    r"(?:show|list)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?(?:documents?|files?)\s+(?:available|present)",
 ]
 
 # Words that make the question a targeted lookup rather than a listing.
@@ -143,6 +181,54 @@ async def _list_document_folders() -> list[FolderInfo]:
     ]
 
 
+async def _list_repo_documents() -> list[RepoDocument]:
+    """Enumerate every indexed document, each with an open/download id.
+
+    Sourced from the SQLite catalog (the authoritative index) rather than a
+    filesystem walk: it is fast, works regardless of share mount state, and
+    every entry already has a ``document_id`` for ``GET /api/documents/{id}``.
+    """
+    from src.database import async_session_factory
+    from src.models.document import Document
+    from src.models.source import DataSource, SourceDocument
+    from sqlalchemy import select
+
+    async with async_session_factory() as db:
+        doc_rows = await db.execute(
+            select(
+                Document.id,
+                Document.file_name,
+                Document.file_path,
+                Document.file_type,
+                Document.file_size_bytes,
+            )
+        )
+        documents = doc_rows.all()
+
+        link_rows = await db.execute(
+            select(SourceDocument.document_id, DataSource.name).join(
+                DataSource, DataSource.id == SourceDocument.source_id
+            )
+        )
+        sources: dict[str, set[str]] = {}
+        for doc_id, source_name in link_rows:
+            sources.setdefault(doc_id, set()).add(source_name)
+
+    docs = [
+        RepoDocument(
+            document_id=doc_id,
+            file_name=file_name or "",
+            folder=_clean_folder_path(file_path or ""),
+            file_type=file_type or "",
+            file_size_bytes=size,
+            source=", ".join(sorted(sources.get(doc_id, ()))),
+        )
+        for doc_id, file_name, file_path, file_type, size in documents
+    ]
+    docs.sort(key=lambda d: (d.folder.lower(), d.file_name.lower()))
+    return docs
+
+
 # ── Endpoints ───────────────────────────────────────────────────────
 
 
@@ -157,16 +243,19 @@ async def query_chat(request: QueryRequest):
     # Catalog listing intent — no vector store needed
     if _is_listing_query(request.question):
         folders = await _list_document_folders()
+        documents = await _list_repo_documents()
         logger.info(
             "query_listing",
             question=request.question[:80],
             folders=len(folders),
+            documents=len(documents),
         )
         return QueryResponse(
             question=request.question,
             intent="listing",
             results=[],
             folders=folders,
+            documents=documents,
             total_chunks_searched=0,
         )
 
@@ -233,6 +322,7 @@ async def query_chat(request: QueryRequest):
         results.append(
             EvidenceChunk(
                 document_name=meta.get("file_name", "unknown"),
+                document_id=doc_id,
                 file_type=meta.get("file_type", ""),
                 file_path=fp,
                 chunk_content=doc,
@@ -255,6 +345,50 @@ async def query_chat(request: QueryRequest):
             )
         )
 
+    # Answer synthesis (best-effort) — synthesize a natural-language answer
+    # from the top evidence using the configured LLM provider. Degrades to
+    # evidence-only when the provider is unavailable.
+    answer: str | None = None
+    citations: list[str] = []
+    insufficient_evidence = False
+
+    top_score = results[0].relevance_score if results else 0.0
+    llm_settings = load_settings()
+
+    if not results or top_score < llm_settings.min_relevance_score:
+        insufficient_evidence = True
+        answer = INSUFFICIENT_EVIDENCE_ANSWER
+    else:
+        try:
+            provider = get_llm()
+            evidence = [
+                {
+                    "document_name": r.document_name,
+                    "file_path": r.file_path,
+                    "chunk_content": r.chunk_content,
+                }
+                for r in results
+            ]
+            prompt = build_grounding_prompt(request.question, evidence)
+            answer = await provider.generate(
+                prompt,
+                system=SYSTEM_PROMPT,
+                max_tokens=llm_settings.max_tokens,
+                temperature=llm_settings.temperature,
+            )
+            citations = [r.document_name for r in results]
+            logger.info(
+                "answer_synthesized",
+                question=request.question[:80],
+                provider=llm_settings.provider,
+                citations=len(citations),
+            )
+        except Exception as e:
+            # Provider unavailable (model missing, no API key, offline, etc.).
+            # Return evidence-only rather than failing the request.
+            logger.error("answer_synthesis_failed", error=str(e))
+            answer = None
+
     logger.info(
         "query_complete",
         question=request.question[:80],
@@ -267,4 +401,7 @@ async def query_chat(request: QueryRequest):
         intent="semantic",
         results=results,
         total_chunks_searched=chunk_count,
+        answer=answer,
+        citations=citations,
+        insufficient_evidence=insufficient_evidence,
     )

@@ -23,8 +23,8 @@ logger = get_logger(__name__)
 CREDENTIALS_FILE = settings.data_dir / ".credentials"
 SESSION_SECRET_FILE = settings.data_dir / ".session_secret"
 
-# ── Token expiry: 8 hours ─────────────────────────────────────────
-SESSION_TTL = 8 * 3600
+# ── Token expiry (configurable via SESSION_TTL_HOURS) ────────────
+SESSION_TTL = settings.session_ttl_hours * 3600
 
 # ── Internal: load / save ──────────────────────────────────────────
 

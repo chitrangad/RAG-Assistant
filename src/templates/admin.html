@@ -317,6 +317,71 @@
     <div class="health-card"><div class="val" id="h-runs">…</div><div class="lbl">Ing. Runs</div></div>
   </div>
 
+  <!-- AI Answer Engine -->
+  <div class="section">
+    <div class="section-title">AI Answer Engine</div>
+    <div class="form-card">
+      <div class="form-row">
+        <div class="form-group" style="max-width:150px">
+          <label>Provider</label>
+          <select id="llm-provider" onchange="llmToggleProvider()">
+            <option value="local">Local (Qwen3-1.7B)</option>
+            <option value="external">External API</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Model Path (local)</label>
+          <input type="text" id="llm-model-path" placeholder="./data/models/qwen3-1.7b-instruct.Q4_K_M.gguf">
+        </div>
+        <div class="form-group" style="max-width:110px">
+          <label>Context</label>
+          <input type="number" id="llm-n-ctx" value="4096" min="256" max="32768">
+        </div>
+        <div class="form-group" style="max-width:110px">
+          <label>Threads</label>
+          <input type="number" id="llm-n-threads" value="4" min="1" max="64">
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label>Temperature</label>
+          <input type="number" id="llm-temperature" value="0.1" step="0.1" min="0" max="2">
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label>Max Tokens</label>
+          <input type="number" id="llm-max-tokens" value="128" min="64" max="4096">
+        </div>
+        <div class="form-group" style="max-width:160px">
+          <label>Disable thinking</label>
+          <label class="checkbox"><input type="checkbox" id="llm-no-think" checked> /no_think</label>
+        </div>
+      </div>
+      <div class="form-row" id="llm-external-row" style="display:none">
+        <div class="form-group">
+          <label>Base URL</label>
+          <input type="text" id="llm-base-url" placeholder="https://api.openai.com/v1">
+        </div>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="password" id="llm-api-key" placeholder="Leave empty to keep existing">
+        </div>
+        <div class="form-group" style="max-width:180px">
+          <label>Model</label>
+          <input type="text" id="llm-model" placeholder="gpt-4o-mini">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="max-width:160px">
+          <label>Min Relevance Score</label>
+          <input type="number" id="llm-min-score" value="0.3" step="0.05" min="0" max="1">
+        </div>
+        <button class="btn-primary" onclick="saveLlmSettings()">💾 Save Settings</button>
+        <button class="btn-sm outline" style="margin-bottom:0.2rem" onclick="testLlm()" id="llm-test-btn">🔌 Test Provider</button>
+        <button class="btn-sm outline" style="margin-bottom:0.2rem" onclick="downloadModel()" id="llm-dl-btn">⬇ Download model</button>
+      </div>
+      <div id="llm-status" style="margin-top:0.6rem;font-size:0.74rem;color:var(--text-muted)"></div>
+      <div id="llm-dl-status" style="margin-top:0.4rem;font-size:0.74rem;color:var(--text-muted)"></div>
+    </div>
+  </div>
+
   <!-- Add Source -->
   <div class="section">
     <div class="section-title">Add Data Source</div>
@@ -939,9 +1004,137 @@ async function saveSource() {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+// ── AI Answer Engine settings ───────────────────────────────────
+async function loadLlmSettings() {
+  try {
+    const r = await fetch('/api/admin/llm-settings');
+    const s = await r.json();
+    document.getElementById('llm-provider').value = s.provider;
+    document.getElementById('llm-model-path').value = s.model_path || '';
+    document.getElementById('llm-n-ctx').value = s.n_ctx;
+    document.getElementById('llm-n-threads').value = s.n_threads;
+    document.getElementById('llm-temperature').value = s.temperature;
+    document.getElementById('llm-max-tokens').value = s.max_tokens;
+    document.getElementById('llm-no-think').checked = !!s.no_think;
+    document.getElementById('llm-base-url').value = s.base_url || '';
+    document.getElementById('llm-model').value = s.model || '';
+    document.getElementById('llm-min-score').value = s.min_relevance_score;
+    const bits = [];
+    if (s.provider === 'external') {
+      bits.push('External API' + (s.has_api_key ? ' — key ••••' + s.api_key_last4 : ' — no key set'));
+    } else {
+      bits.push(s.local_model_available ? 'Local model available ✓' : 'Local model NOT found at configured path');
+    }
+    document.getElementById('llm-status').textContent = bits.join(' · ');
+    llmToggleProvider();
+  } catch(e) {}
+}
+
+function llmToggleProvider() {
+  const external = document.getElementById('llm-provider').value === 'external';
+  document.getElementById('llm-external-row').style.display = external ? 'flex' : 'none';
+  ['llm-model-path','llm-n-ctx','llm-n-threads'].forEach(id => {
+    document.getElementById(id).closest('.form-group').style.display = external ? 'none' : 'flex';
+  });
+}
+
+async function saveLlmSettings() {
+  const body = {
+    provider: document.getElementById('llm-provider').value,
+    model_path: document.getElementById('llm-model-path').value.trim(),
+    n_ctx: parseInt(document.getElementById('llm-n-ctx').value, 10),
+    n_threads: parseInt(document.getElementById('llm-n-threads').value, 10),
+    temperature: parseFloat(document.getElementById('llm-temperature').value),
+    max_tokens: parseInt(document.getElementById('llm-max-tokens').value, 10),
+    no_think: document.getElementById('llm-no-think').checked,
+    base_url: document.getElementById('llm-base-url').value.trim(),
+    model: document.getElementById('llm-model').value.trim(),
+    min_relevance_score: parseFloat(document.getElementById('llm-min-score').value),
+  };
+  const key = document.getElementById('llm-api-key').value.trim();
+  if (key) body.api_key = key;
+  try {
+    const r = await fetch('/api/admin/llm-settings', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail); }
+    showToast('LLM settings saved');
+    document.getElementById('llm-api-key').value = '';
+    loadLlmSettings();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function testLlm() {
+  showToast('Testing provider (local model loads on first call — may take a moment)...', 'info');
+  const btn = document.getElementById('llm-test-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/admin/llm/test', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) showToast('OK (' + d.latency_ms + ' ms)', 'success');
+    else showToast('Failed: ' + d.detail, 'error');
+  } catch(e) { showToast('Test error: ' + e.message, 'error'); }
+  btn.disabled = false;
+}
+
+function fmtBytes(b) {
+  if (b == null || isNaN(b) || b < 0) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+  return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+let _dlTimer = null;
+
+async function downloadModel() {
+  const btn = document.getElementById('llm-dl-btn');
+  const status = document.getElementById('llm-dl-status');
+  if (!confirm('Download the ~1.1 GB answer model? This may take a few minutes.')) return;
+  btn.disabled = true;
+  status.innerHTML = 'Starting download…';
+  try {
+    const r = await fetch('/api/admin/llm/download-model', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'download failed to start');
+    status.innerHTML = 'Downloading to <code>' + escJs(d.path) + '</code>…';
+    _dlTimer = setInterval(pollModelDownload, 1200);
+  } catch(e) {
+    status.innerHTML = 'Error: ' + escJs(e.message);
+    btn.disabled = false;
+  }
+}
+
+async function pollModelDownload() {
+  const btn = document.getElementById('llm-dl-btn');
+  const status = document.getElementById('llm-dl-status');
+  try {
+    const r = await fetch('/api/admin/llm/download-model');
+    const d = await r.json();
+    if (d.status === 'downloading') {
+      const pct = d.total > 0 ? Math.round(d.downloaded / d.total * 100) : null;
+      status.innerHTML = 'Downloading… ' +
+        (pct != null ? pct + '%' : fmtBytes(d.downloaded)) +
+        (d.total ? ' (' + fmtBytes(d.downloaded) + ' / ' + fmtBytes(d.total) + ')' : '');
+    } else if (d.status === 'done') {
+      clearInterval(_dlTimer);
+      status.innerHTML = '✅ Model downloaded to <code>' + escJs(d.path) + '</code>. Click Test Provider to verify.';
+      btn.disabled = false;
+      loadLlmSettings();
+    } else if (d.status === 'error') {
+      clearInterval(_dlTimer);
+      status.innerHTML = '❌ Download failed: ' + escJs(d.error);
+      btn.disabled = false;
+    }
+  } catch(e) { /* transient — keep polling */ }
+}
+
 loadHealth();
 loadSources();
 loadRuns();
+loadLlmSettings();
 updatePathHint();
 </script>
 </body>

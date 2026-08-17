@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -14,6 +15,9 @@ from src.models.ingestion import IngestionRun
 from src.models.base import now_utc
 from src.logging_config import get_logger
 from src.auth import require_admin
+from src.llm.settings import LLMSettings, load_settings, save_settings
+from src.llm.factory import reset_llm_cache
+from src.llm.downloader import DEFAULT_MODEL_URL, get_downloader
 
 logger = get_logger(__name__)
 
@@ -124,6 +128,42 @@ class AdminHealthResponse(BaseModel):
     total_documents: int
     total_chunks: int
     total_ingestion_runs: int
+
+
+class LLMSettingsResponse(BaseModel):
+    provider: str
+    model_path: str
+    n_ctx: int
+    n_threads: int
+    temperature: float
+    max_tokens: int
+    no_think: bool
+    base_url: str
+    model: str
+    min_relevance_score: float
+    has_api_key: bool = False
+    api_key_last4: str = ""
+    local_model_available: bool = False
+
+
+class LLMSettingsUpdate(BaseModel):
+    provider: str | None = Field(None, pattern="^(local|external)$")
+    model_path: str | None = None
+    n_ctx: int | None = Field(None, ge=256, le=32768)
+    n_threads: int | None = Field(None, ge=1, le=64)
+    temperature: float | None = Field(None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(None, ge=64, le=4096)
+    no_think: bool | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+    min_relevance_score: float | None = Field(None, ge=0.0, le=1.0)
+
+
+class LLMTestResponse(BaseModel):
+    success: bool
+    detail: str
+    latency_ms: int = 0
 
 
 class ReindexRequest(BaseModel):
@@ -748,6 +788,120 @@ async def delete_run(run_id: str):
         "documents_deleted": len(doc_ids),
         "run_status": run_status,
     }
+
+
+# ── LLM / answer-engine settings ───────────────────────────────────────
+
+
+def _llm_to_response(s: LLMSettings) -> LLMSettingsResponse:
+    """Build a response, masking the API key and flagging model availability."""
+    model_path = Path(s.model_path)
+    return LLMSettingsResponse(
+        provider=s.provider,
+        model_path=s.model_path,
+        n_ctx=s.n_ctx,
+        n_threads=s.n_threads,
+        temperature=s.temperature,
+        max_tokens=s.max_tokens,
+        no_think=s.no_think,
+        base_url=s.base_url,
+        model=s.model,
+        min_relevance_score=s.min_relevance_score,
+        has_api_key=bool(s.api_key),
+        api_key_last4=s.api_key[-4:] if s.api_key else "",
+        local_model_available=model_path.exists(),
+    )
+
+
+@router.get("/llm-settings", response_model=LLMSettingsResponse)
+async def get_llm_settings():
+    """Return the current answer-engine settings (API key masked)."""
+    return _llm_to_response(load_settings())
+
+
+@router.put("/llm-settings", response_model=LLMSettingsResponse)
+async def update_llm_settings(body: LLMSettingsUpdate):
+    """Update answer-engine settings. An empty/omitted ``api_key`` keeps the existing one."""
+    current = load_settings()
+
+    if body.provider is not None:
+        current.provider = body.provider
+    if body.model_path is not None:
+        current.model_path = body.model_path
+    if body.n_ctx is not None:
+        current.n_ctx = body.n_ctx
+    if body.n_threads is not None:
+        current.n_threads = body.n_threads
+    if body.temperature is not None:
+        current.temperature = body.temperature
+    if body.max_tokens is not None:
+        current.max_tokens = body.max_tokens
+    if body.no_think is not None:
+        current.no_think = body.no_think
+    if body.base_url is not None:
+        current.base_url = body.base_url
+    if body.api_key:  # empty string = keep existing (avoids wiping on unrelated edits)
+        current.api_key = body.api_key
+    if body.model is not None:
+        current.model = body.model
+    if body.min_relevance_score is not None:
+        current.min_relevance_score = body.min_relevance_score
+
+    save_settings(current)
+    reset_llm_cache()
+    logger.info("llm_settings_updated", provider=current.provider)
+    return _llm_to_response(current)
+
+
+@router.post("/llm/test", response_model=LLMTestResponse)
+async def test_llm():
+    """Send a trivial prompt to the configured provider to verify it works.
+
+    For the local provider the first call loads the model (can take a while).
+    """
+    import time
+
+    from src.llm.factory import get_llm
+
+    s = load_settings()
+    start = time.perf_counter()
+    try:
+        provider = get_llm()
+        await provider.generate(
+            "Reply with exactly the word: OK",
+            system="You are a test harness.",
+            max_tokens=8,
+            temperature=0.0,
+        )
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        return LLMTestResponse(
+            success=True,
+            detail=f"Provider responded successfully ({s.provider})",
+            latency_ms=latency_ms,
+        )
+    except Exception as e:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        logger.error("llm_test_failed", provider=s.provider, error=str(e))
+        return LLMTestResponse(success=False, detail=str(e), latency_ms=latency_ms)
+
+
+@router.post("/llm/download-model")
+async def start_model_download():
+    """Download the default answer LLM to the configured model path.
+
+    Runs in a background thread; poll ``GET /llm/download-model`` for progress.
+    """
+    s = load_settings()
+    state = get_downloader().start(s.model_path)
+    if state["status"] == "downloading":
+        logger.info("model_download_started", path=state["path"])
+    return {**state, "url": DEFAULT_MODEL_URL}
+
+
+@router.get("/llm/download-model")
+async def get_model_download_status():
+    """Poll the model download progress."""
+    return get_downloader().state()
 
 
 # ── Quick scan ───────────────────────────────────────────────────────

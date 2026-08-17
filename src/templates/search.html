@@ -73,6 +73,10 @@
   .status-dot.load { background: var(--warning); animation: pulse 1s infinite; }
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
   .status-num { color: var(--primary); font-weight: 700; }
+  .status-item.trust {
+    color: #065f46; background: var(--success-bg);
+    border-color: #a7f3d0; font-weight: 600;
+  }
 
   /* ── Search hero ────────────────────────────────── */
   .search-hero { margin-bottom: 1.5rem; }
@@ -186,6 +190,11 @@
     font-size: 0.73rem; color: var(--primary); font-weight: 500;
     display: flex; align-items: center; gap: 0.3rem;
   }
+  .card-open {
+    font-size: 0.72rem; color: var(--primary); text-decoration: none;
+    font-weight: 600; white-space: nowrap;
+  }
+  .card-open:hover { text-decoration: underline; }
   .card-path {
     font-size: 0.68rem; color: var(--text-subtle);
     padding: 0.25rem 1rem 0.6rem; font-family: monospace;
@@ -233,6 +242,33 @@
     padding: 0.2rem 0.55rem; border-radius: 20px; font-weight: 600;
   }
 
+  /* ── Document list (catalog view) ───────────────── */
+  .doc-filter {
+    width: 100%; max-width: 420px; padding: 0.55rem 0.85rem;
+    margin: 0.8rem 0 0.6rem; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface);
+    color: var(--text); font-size: 0.85rem; box-sizing: border-box;
+  }
+  .doc-filter:focus { outline: none; border-color: var(--border-focus); }
+  .doc-list { display: flex; flex-direction: column; gap: 0.45rem; }
+  .doc-row {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 0.85rem;
+    display: flex; align-items: center; gap: 0.7rem;
+    animation: fadeIn 0.3s ease; box-shadow: var(--shadow);
+  }
+  .doc-icon { font-size: 1.1rem; flex-shrink: 0; }
+  .doc-main { flex: 1; min-width: 0; }
+  .doc-name { font-weight: 600; font-size: 0.85rem; color: var(--text); word-break: break-word; }
+  .doc-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem; word-break: break-word; }
+  .doc-open {
+    flex-shrink: 0; font-size: 0.72rem; font-weight: 600; text-decoration: none;
+    color: var(--primary); background: var(--bg);
+    border: 1px solid var(--border); padding: 0.3rem 0.6rem; border-radius: 6px;
+    white-space: nowrap;
+  }
+  .doc-open:hover { border-color: var(--border-focus); }
+
   /* ── States ─────────────────────────────────────── */
   .empty-state { text-align: center; padding: 3.5rem 1rem; }
   .empty-icon { font-size: 3rem; margin-bottom: 0.75rem; opacity: 0.5; }
@@ -253,23 +289,41 @@
   .no-results { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
   .no-results strong { color: var(--text); }
 
-  /* ── Extension footer ───────────────────────────── */
-  .ext-footer {
-    margin-top: 2.5rem; padding: 1rem 1.1rem;
+  /* ── Answer box (natural-language answer) ─────── */
+  .answer-box {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow);
-    display: flex; justify-content: space-between; align-items: center;
-    flex-wrap: wrap; gap: 0.75rem;
+    border-left: 4px solid var(--primary);
+    border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: 0.9rem;
+    box-shadow: var(--shadow); animation: fadeIn 0.3s ease;
   }
-  .ext-footer p { font-size: 0.78rem; color: var(--text-muted); }
-  .ext-footer strong { color: var(--text); }
-  .ext-links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-  .ext-link {
-    padding: 0.35rem 0.7rem; border-radius: 5px; font-size: 0.73rem;
-    font-weight: 600; text-decoration: none; transition: background 0.15s, color 0.15s;
-    background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);
+  .answer-box .answer-label {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--primary); font-weight: 700; margin-bottom: 0.4rem;
   }
-  .ext-link:hover { background: var(--primary); color: white; border-color: var(--primary); }
+  .answer-box .answer-text {
+    font-size: 0.95rem; line-height: 1.6; color: var(--text);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .answer-box .answer-citations {
+    margin-top: 0.6rem; font-size: 0.72rem; color: var(--text-muted);
+    display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem;
+  }
+  .answer-box .answer-citations a {
+    color: var(--primary); cursor: pointer; text-decoration: none;
+  }
+  .answer-box .answer-citations a:hover { text-decoration: underline; }
+  .answer-box.insufficient { border-left-color: var(--warning); background: #fffbeb; }
+  .answer-box.insufficient .answer-label { color: var(--warning); }
+  .answer-box .thinking-note { font-size: 0.72rem; color: var(--text-subtle); font-style: italic; }
+
+  /* ── Evidence collapse toggle ───────────────────── */
+  .evidence-toggle {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.72rem; color: var(--primary); cursor: pointer;
+    font-weight: 600; user-select: none;
+  }
+  .evidence-toggle:hover { text-decoration: underline; }
+  .evidence-wrap.hidden { display: none; }
 
   /* ── Footer links ───────────────────────────────── */
   .footer-links {
@@ -309,9 +363,9 @@
 
   <header>
     <div class="logo">
-      <span class="logo-icon">📚</span>RAG Knowledge Assistant
+      <span class="logo-icon">🔒</span>RAG Knowledge Assistant
     </div>
-    <p class="subtitle">Search your organisation's document repository with precision</p>
+    <p class="subtitle">Ask your documents anything — privately, with a local LLM.</p>
   </header>
 
   <!-- Status -->
@@ -322,6 +376,9 @@
     </div>
     <div class="status-item">
       Indexed: <span class="status-num" id="chunk-count">...</span> items
+    </div>
+    <div class="status-item trust">
+      🔒 Local &amp; private — data never leaves this device
     </div>
   </div>
 
@@ -347,25 +404,12 @@
   <div id="results-area">
     <div class="empty-state">
       <div class="empty-icon">📚</div>
-      <p>Ask a question above to search your indexed documents.<br>Evidence will appear here with source citations and metadata.</p>
-    </div>
-  </div>
-
-  <!-- Extension footer -->
-  <div class="ext-footer">
-    <p><strong>🧩 Using the browser extension?</strong> Open any AI chat — evidence is injected automatically.</p>
-    <div class="ext-links">
-      <a class="ext-link" href="https://gemini.google.com" target="_blank" rel="noopener">Gemini ↗</a>
-      <a class="ext-link" href="https://chatgpt.com" target="_blank" rel="noopener">ChatGPT ↗</a>
-      <a class="ext-link" href="https://copilot.microsoft.com" target="_blank" rel="noopener">Copilot ↗</a>
-      <a class="ext-link" href="https://claude.ai" target="_blank" rel="noopener">Claude ↗</a>
+      <p>Ask a question above to search your indexed documents.<br>You'll get a natural-language answer with citations, backed by the evidence below.</p>
     </div>
   </div>
 
   <div class="footer-links">
     <a href="/docs">API Docs</a>
-    <a href="/api/health">Health</a>
-    <a href="/api/ingest/stats">Statistics</a>
     <a href="/admin">⚙ Administration</a>
   </div>
 
@@ -451,6 +495,7 @@ function buildCard(res, idx) {
     '<div class="card-body"><div class="card-text">' + meta.cleanText + '</div></div>' +
     '<div class="card-footer">' +
       '<div class="card-source">📄 ' + res.document_name + ' <span class="card-score">· <strong>' + pct + '%</strong> match</span></div>' +
+      (res.document_id ? '<a class="card-open" href="/api/documents/' + res.document_id + '" target="_blank" rel="noopener">Open ↗</a>' : '') +
       (tags ? '<div class="card-tags">' + tags + '</div>' : '') +
     '</div>' +
     (res.file_path ? '<div class="card-path">📁 ' + res.file_path + '</div>' : '') +
@@ -458,6 +503,40 @@ function buildCard(res, idx) {
 }
 
 // ── Main search ─────────────────────────────────────────────────
+function escHtml(v) {
+  return (v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function escAttr(v) {
+  return escHtml(v).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function formatSize(b) {
+  if (b == null || isNaN(b)) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+  return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function toggleEvidence(el) {
+  const wrap = document.getElementById('evidence-wrap');
+  if (!wrap) return;
+  const hidden = wrap.classList.toggle('hidden');
+  const n = wrap.querySelectorAll('.evidence-card').length;
+  el.textContent = (hidden ? '▸ Show' : '▾ Hide') + ' evidence (' + n + ')';
+}
+
+function scrollToEvidence(i) {
+  const wrap = document.getElementById('evidence-wrap');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  const el = document.querySelector('.evidence-toggle');
+  if (el) el.textContent = '▾ Hide evidence (' + wrap.querySelectorAll('.evidence-card').length + ')';
+  const cards = wrap.querySelectorAll('.evidence-card');
+  if (cards[i]) cards[i].scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
 function runExample(q) {
   document.getElementById('main-query').value = q;
   searchDocuments();
@@ -487,35 +566,89 @@ async function searchDocuments() {
 
     const d = await r.json();
 
-    // Catalog listing response (folders/projects)
+    // Catalog listing response — flat document list with open/download links
     if (d.intent === 'listing') {
-      if (!d.folders || d.folders.length === 0) {
+      const docs = d.documents || [];
+      if (docs.length === 0) {
         area.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><p>No documents indexed yet.<br>Ask an admin to ingest documents from a source, then try again.</p></div>';
         return;
       }
-      let html = '<div class="results-summary"><span class="results-count">Found <strong>' + d.folders.length + '</strong> folder(s)/project(s) · ' + d.folders.reduce((s,f)=>s+f.document_count,0) + ' documents</span></div>';
-      d.folders.forEach((f, idx) => {
-        const src = f.sources && f.sources.length ? ' · from <strong>' + f.sources.join(', ') + '</strong>' : '';
-        html += '<div class="folder-card">' +
-          '<div class="folder-icon">📁</div>' +
-          '<div class="folder-main">' +
-            '<div class="folder-name">' + (idx + 1) + '. ' + f.folder + '</div>' +
-            '<div class="folder-meta">' + f.document_count + ' document(s)' + src + '</div>' +
+      const folderCount = (d.folders || []).length;
+      let html = '<div class="results-summary"><span class="results-count">Found <strong>' + docs.length + '</strong> document(s)' + (folderCount ? ' in <strong>' + folderCount + '</strong> folder(s)/project(s)' : '') + '</span></div>';
+      html += '<input type="text" id="doc-filter" class="doc-filter" placeholder="Filter documents by name, folder, or source…">';
+      html += '<div class="doc-list">';
+      docs.forEach((doc) => {
+        const ft = (doc.file_type || '').toLowerCase().replace('.', '');
+        const viewable = ft === 'txt' || ft === 'md' || ft === 'pdf';
+        const meta = [
+          doc.folder && doc.folder !== '/' ? doc.folder : '',
+          doc.source,
+          formatSize(doc.file_size_bytes)
+        ].filter(Boolean).join(' · ');
+        html += '<div class="doc-row" data-name="' + escAttr((doc.file_name + ' ' + doc.folder + ' ' + doc.source).toLowerCase()) + '">' +
+          '<div class="doc-icon">📄</div>' +
+          '<div class="doc-main">' +
+            '<div class="doc-name">' + escHtml(doc.file_name) + '</div>' +
+            '<div class="doc-meta">' + escHtml(meta) + '</div>' +
           '</div>' +
-          '<div class="folder-count">' + f.document_count + ' files</div>' +
+          '<a class="doc-open" href="/api/documents/' + encodeURIComponent(doc.document_id) + '" target="_blank" rel="noopener">' + (viewable ? 'Open ↗' : 'Download') + '</a>' +
         '</div>';
       });
+      html += '</div>';
+      area.innerHTML = html;
+      const filterEl = document.getElementById('doc-filter');
+      if (filterEl) {
+        filterEl.addEventListener('input', function () {
+          const q = this.value.toLowerCase();
+          document.querySelectorAll('.doc-row').forEach(function (row) {
+            row.style.display = row.getAttribute('data-name').indexOf(q) !== -1 ? '' : 'none';
+          });
+        });
+      }
+      return;
+    }
+
+    // Semantic search — natural-language answer (if available) + evidence
+    let html = '';
+
+    if (d.insufficient_evidence) {
+      html += '<div class="answer-box insufficient">' +
+        '<div class="answer-label">⚠ Insufficient Evidence</div>' +
+        '<div class="answer-text">' + escHtml(d.answer || 'I do not have enough evidence to answer this question.') + '</div>' +
+      '</div>';
+    } else if (d.answer) {
+      let cites = '';
+      if (d.citations && d.citations.length) {
+        cites = '<div class="answer-citations">Sources: ' +
+          d.citations.map((c, i) => {
+            const doc = d.results && d.results[i] ? d.results[i] : {};
+            const label = '[' + (i + 1) + '] ' + escHtml(c);
+            return doc.document_id
+              ? '<a href="/api/documents/' + doc.document_id + '" target="_blank" rel="noopener">' + label + ' ↗</a>'
+              : '<span>' + label + '</span>';
+          }).join('') +
+        '</div>';
+      }
+      html += '<div class="answer-box">' +
+        '<div class="answer-label">✨ Answer</div>' +
+        '<div class="answer-text">' + escHtml(d.answer) + '</div>' +
+        cites +
+      '</div>';
+    }
+
+    if (!d.results || d.results.length === 0) {
+      html += '<div class="no-results">No matching evidence found for <strong>"' + escHtml(q) + '"</strong>.<br>Try rephrasing your question or using different keywords.</div>';
       area.innerHTML = html;
       return;
     }
 
-    if (!d.results || d.results.length === 0) {
-      area.innerHTML = '<div class="no-results">No matching evidence found for <strong>"' + q + '"</strong>.<br>Try rephrasing your question or using different keywords.</div>';
-      return;
-    }
-
-    let html = '<div class="results-summary"><span class="results-count">Found <strong>' + d.results.length + '</strong> result(s) across <strong>' + d.total_chunks_searched + '</strong> chunks</span></div>';
+    html += '<div class="results-summary">' +
+      '<span class="results-count">Found <strong>' + d.results.length + '</strong> result(s) across <strong>' + d.total_chunks_searched + '</strong> chunks</span>' +
+      '<span class="evidence-toggle" onclick="toggleEvidence(this)">▾ Show evidence (' + d.results.length + ')</span>' +
+    '</div>';
+    html += '<div class="evidence-wrap" id="evidence-wrap">';
     d.results.forEach((res, idx) => { html += buildCard(res, idx); });
+    html += '</div>';
     area.innerHTML = html;
 
   } catch(e) {

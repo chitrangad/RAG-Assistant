@@ -33,11 +33,16 @@ COPY pyproject.toml README.md ./
 #    wheel can never be pulled; the index serves torch's full dep tree.
 RUN pip install --index-url https://download.pytorch.org/whl/cpu torch
 
-# 2) The project itself (all runtime deps declared in pyproject.toml).
+# 2) llama.cpp (local answer LLM) from the CPU wheel index so the image never
+#    compiles it from source. Installed before `pip install .` so the main
+#    install sees it already satisfied.
+RUN pip install "llama-cpp-python>=0.3.35" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+# 3) The project itself (all runtime deps declared in pyproject.toml).
 COPY . .
 RUN pip install .
 
-# 3) Pre-cache the embedding model into the image (cached under /root/.cache
+# 4) Pre-cache the embedding model into the image (cached under /root/.cache
 #    at build time, so the root user finds it offline at runtime). If you
 #    switch to a non-root USER, set HF_HOME to a writable path.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
