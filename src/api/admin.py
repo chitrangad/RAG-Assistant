@@ -144,6 +144,7 @@ class LLMSettingsResponse(BaseModel):
     has_api_key: bool = False
     api_key_last4: str = ""
     local_model_available: bool = False
+    default_model_url: str = ""
 
 
 class LLMSettingsUpdate(BaseModel):
@@ -810,6 +811,7 @@ def _llm_to_response(s: LLMSettings) -> LLMSettingsResponse:
         has_api_key=bool(s.api_key),
         api_key_last4=s.api_key[-4:] if s.api_key else "",
         local_model_available=model_path.exists(),
+        default_model_url=DEFAULT_MODEL_URL,
     )
 
 
@@ -885,17 +887,26 @@ async def test_llm():
         return LLMTestResponse(success=False, detail=str(e), latency_ms=latency_ms)
 
 
-@router.post("/llm/download-model")
-async def start_model_download():
-    """Download the default answer LLM to the configured model path.
+class ModelDownloadRequest(BaseModel):
+    url: str | None = Field(None, description="GGUF model URL to download")
+    model_path: str | None = Field(None, description="Destination path (defaults to configured model path)")
 
+
+@router.post("/llm/download-model")
+async def start_model_download(body: ModelDownloadRequest | None = None):
+    """Download an answer LLM (GGUF) to the configured model path.
+
+    Optionally pass ``url`` (the model file URL) and ``model_path`` (where to
+    save it); defaults to the Qwen3-1.7B model and the configured model path.
     Runs in a background thread; poll ``GET /llm/download-model`` for progress.
     """
     s = load_settings()
-    state = get_downloader().start(s.model_path)
+    url = (body.url or DEFAULT_MODEL_URL) if body else DEFAULT_MODEL_URL
+    target = (body.model_path or s.model_path) if body else s.model_path
+    state = get_downloader().start(target, url=url)
     if state["status"] == "downloading":
         logger.info("model_download_started", path=state["path"])
-    return {**state, "url": DEFAULT_MODEL_URL}
+    return {**state, "url": url}
 
 
 @router.get("/llm/download-model")
