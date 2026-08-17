@@ -406,8 +406,8 @@
         </div>
         <div class="form-group">
           <label>Path</label>
-          <input type="text" id="src-path" placeholder="e.g. //server/share/docs or /mnt/docs">
-          <small id="path-hint" style="color:var(--text-subtle);font-size:0.68rem;margin-top:0.15rem">Any mounted network path — Windows UNC, Linux GVFS, macOS — or SMB with credentials</small>
+          <input type="text" id="src-path" placeholder="e.g. \\server\share\docs or /mnt/docs">
+          <small id="path-hint" style="color:var(--text-subtle);font-size:0.68rem;margin-top:0.15rem">A mounted path (Windows UNC, Linux GVFS, macOS) or a remote UNC like <code>\\server\share</code> — reached directly via SMB, no mount needed</small>
         </div>
         <div class="form-group" style="max-width:120px">
           <label>Scan Mode</label>
@@ -922,7 +922,7 @@ function updatePathHint() {
   const type = document.getElementById('src-type').value;
   const hint = document.getElementById('path-hint');
   if (type === 'network_share') {
-    hint.innerHTML = 'Any mounted network path — Windows UNC (<code>\\\\server\\share\\folder</code>), Linux GVFS (<code>/run/user/.../gvfs/...</code>), macOS (<code>/Volumes/share</code>). Credentials only needed if the share is not already mounted.';
+    hint.innerHTML = 'A path already mounted on this machine — Windows UNC (<code>\\\\server\\share\\folder</code>), Linux GVFS (<code>/run/user/.../gvfs/...</code>), macOS (<code>/Volumes/share</code>) — <b>or</b> any remote UNC (<code>\\\\server\\share\\folder</code>, <code>//server/share</code>, <code>smb://server/share</code>) that the app reaches directly via smbclient, no mount required. Add credentials only for password-protected shares.';
   } else {
     hint.innerHTML = 'Any local filesystem path or mounted network drive — <code>/path/to/docs</code>, <code>C:\\path\\to\\docs</code>.';
   }

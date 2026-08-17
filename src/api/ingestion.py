@@ -70,15 +70,15 @@ async def ingest_upload(
 ):
     """Upload and ingest a single document file.
 
-    Accepts .pdf, .docx, .md, or .txt files. The file is staged, extracted,
-    chunked, embedded, and indexed.
+    Accepts .pdf, .docx, .epub, .md, or .txt files. The file is staged,
+    extracted, chunked, embedded, and indexed.
     """
     # Validate file type
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
-    if f".{ext}" not in {".pdf", ".docx", ".md", ".txt"}:
+    if f".{ext}" not in {".pdf", ".docx", ".epub", ".md", ".txt"}:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: .{ext}. Supported: .pdf, .docx, .md, .txt",
+            detail=f"Unsupported file type: .{ext}. Supported: .pdf, .docx, .epub, .md, .txt",
         )
 
     content = await file.read()

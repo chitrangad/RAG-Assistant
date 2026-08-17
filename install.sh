@@ -45,7 +45,27 @@ if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)
   exit 1
 fi
 
-# 2) Virtualenv
+# 2) smbclient (best-effort) — lets the app reach remote UNC shares directly
+#    over SMB without mounting them. Optional: mounted/local shares still work
+#    without it, so a failed install is only a warning.
+if ! command -v smbclient >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    log "Installing smbclient (for direct UNC share access)…"
+    sudo apt-get update -qq 2>/dev/null || true
+    sudo apt-get install -y -qq smbclient 2>/dev/null \
+      || warn "Could not install smbclient — mounted network shares still work."
+  elif command -v brew >/dev/null 2>&1; then
+    log "Installing samba via Homebrew (provides smbclient)…"
+    brew install samba >/dev/null 2>&1 \
+      || warn "Could not install smbclient — mounted network shares still work."
+  else
+    warn "smbclient not found — remote UNC shares need it; mounted shares still work."
+  fi
+else
+  log "smbclient already installed."
+fi
+
+# 3) Virtualenv
 if [ ! -x "$VENV_DIR/bin/python" ]; then
   log "Creating virtualenv at $VENV_DIR…"
   "$PYTHON" -m venv "$VENV_DIR"

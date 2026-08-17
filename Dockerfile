@@ -15,8 +15,9 @@
 
 FROM python:3.12-slim
 
-# libgomp1 is required by torch / onnxruntime (chromadb dependency) at runtime
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+# libgomp1 is required by torch / onnxruntime (chromadb dependency) at runtime;
+# smbclient lets the app reach remote UNC shares directly (no mount required)
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 smbclient && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

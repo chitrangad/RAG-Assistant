@@ -20,6 +20,7 @@ There are **two supported deployment methods**:
 |-------------|----------------|-------|
 | Python (Method A only) | 3.11+ | Tested on 3.12 |
 | Docker + Compose v2 (Method B only) | recent | `docker compose` plugin required |
+| smbclient (optional) | recent | Needed to connect to remote **UNC shares without mounting them** (direct SMB mode). Mounted network shares work without it. Installed automatically by `install.sh` / included in the Docker image |
 | Disk space | ~4 GB | Python/ML stack + ~80 MB embedding model + ~1.1 GB answer LLM |
 | RAM | 8 GB+ | Embedding model + answer LLM both load into memory |
 
@@ -140,7 +141,16 @@ The host port changes; the container keeps listening on 8000 internally. `docker
 
 ### Network shares / local folders
 
-The container only sees host paths you bind-mount. Mount your document share at the **same path** you'll enter in **Admin → Add Source**:
+Two ways to add a network share in **Admin → Add Source**:
+
+1. **Mounted path** — bind-mount the share at the same path you'll enter in the UI, e.g.:
+
+    ```yaml
+    volumes:
+      - "/mnt/omv-share:/mnt/omv-share:ro"
+    ```
+
+2. **Direct SMB (no mount)** — enter a UNC path like `\\server\share\folder` (or `//server/share`, `smb://server/share`) plus credentials when the share is password-protected. The app reaches the share itself via `smbclient` (installed in the image); anonymous/guest shares work with no credentials.
 
 ```yaml
 volumes:
@@ -197,7 +207,7 @@ Append more `username:hash` lines to add users.
 ### Ingest content
 
 1. Open **Admin** → **Add Data Source**.
-2. Choose **Network Share** (mounted path) or **Local Folder**.
+2. Choose **Network Share** — a mounted path (GVFS, UNC, `/Volumes`) or a remote UNC entered as `\\server\share\folder` (reached directly via SMB, no mount required) — or **Local Folder**.
 3. Enter the path; click **Test**, then **Scan**. Ingestion runs in the background with live progress.
 
 ---
@@ -262,4 +272,5 @@ tar xzf rag-backup.tar.gz
 | Query returns "insufficient evidence" too often | Lower the minimum relevance score in Admin → AI Answer Engine |
 | Admin login fails | Recreate `data/.credentials` with `generate_credential_line` |
 | Port in use | Set `PORT` (bare metal: `--port`; Docker: `.env`) |
-| Container can't see a share | Bind-mount the share in `docker-compose.yml` (see Network shares) |
+| Container can't see a share | Bind-mount the share in `docker-compose.yml`, or enter it as a remote UNC (`\\server\share`) so the app connects via SMB — no mount needed (see Network shares) |
+| Remote UNC share fails to connect | Ensure `smbclient` is installed on the machine running the app (`apt install smbclient` / included in the Docker image); check credentials and that the share allows SMB access |

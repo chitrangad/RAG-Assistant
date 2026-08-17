@@ -152,7 +152,7 @@ async def test_scan_bad_path_fails_fast(client, admin_token):
 
     r2 = await client.post(f"/api/admin/sources/{sid}/scan")
     assert r2.status_code == 400
-    assert "not accessible" in r2.json()["detail"]
+    assert "does not exist" in r2.json()["detail"]
 
     await client.delete(f"/api/admin/sources/{sid}")
 

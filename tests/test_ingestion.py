@@ -33,9 +33,54 @@ class TestDocumentExtractor:
     def test_supports_method(self):
         assert DocumentExtractor.supports("file.pdf") is True
         assert DocumentExtractor.supports("file.docx") is True
+        assert DocumentExtractor.supports("file.epub") is True
         assert DocumentExtractor.supports("file.md") is True
         assert DocumentExtractor.supports("file.txt") is True
         assert DocumentExtractor.supports("file.xlsx") is False
+
+    def test_extract_epub(self):
+        """EPUB text extraction follows the OPF spine order (stdlib only)."""
+        import zipfile
+
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("mimetype", "application/epub+zip")
+            z.writestr(
+                "OEBPS/content.opf",
+                """<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+  <manifest>
+    <item id="ch1" href="Text/chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="Text/chapter2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>""",
+            )
+            z.writestr(
+                "OEBPS/Text/chapter1.xhtml",
+                "<html xmlns='http://www.w3.org/1999/xhtml'><body>"
+                "<p>Chapter one begins with <em>emphasis</em>.</p></body></html>",
+            )
+            z.writestr(
+                "OEBPS/Text/chapter2.xhtml",
+                "<html xmlns='http://www.w3.org/1999/xhtml'><body>"
+                "<p>Chapter two continues the story.</p></body></html>",
+            )
+
+        extractor = DocumentExtractor()
+        text = extractor.extract(buf.getvalue(), ".epub")
+        assert "Chapter one begins with" in text
+        assert "Chapter two continues" in text
+        # Spine order preserved: chapter one appears before chapter two.
+        assert text.index("one begins") < text.index("two continues")
+
+    def test_extract_epub_invalid_zip_raises(self):
+        extractor = DocumentExtractor()
+        with pytest.raises(ValueError, match="Invalid EPUB"):
+            extractor.extract(b"not a zip at all", ".epub")
 
 
 # ──────────────────────────────────────────────

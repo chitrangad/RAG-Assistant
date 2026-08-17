@@ -390,7 +390,8 @@ async def test_connection(source_id: str):
         if not await connector.validate():
             return TestConnectionResponse(
                 success=False,
-                detail=f"Cannot access: {path}. Check the path and credentials.",
+                detail=connector.last_error
+                or f"Cannot access: {path}. Check the path and credentials.",
             )
 
         # Try discovering files (just count them, don't ingest)
@@ -512,7 +513,8 @@ async def scan_source(source_id: str):
             await db.commit()
             raise HTTPException(
                 status_code=400,
-                detail=f"Path not accessible: {path}. Ensure the network drive is mounted.",
+                detail=connector.last_error
+                or f"Path not accessible: {path}. Ensure the network drive is mounted.",
             )
 
         # Create the run row now so clients can track progress immediately
@@ -935,7 +937,7 @@ async def quick_scan(
     if not await connector.validate():
         raise HTTPException(
             status_code=400,
-            detail=f"Path not accessible: {path}",
+            detail=connector.last_error or f"Path not accessible: {path}",
         )
 
     orchestrator = _get_orchestrator()
