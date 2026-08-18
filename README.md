@@ -15,8 +15,9 @@ No cloud dependencies: everything runs on your laptop — SQLite catalog + Chrom
 - **Semantic search + metadata** — ranked evidence chunks with `relevance_score`, source file, path, and extracted metadata (project names, REQ IDs, CR numbers).
 - **Catalog listing** — "list all the project documents" returns every folder/project with document counts (from SQLite, no top-k cutoff).
 - **Multi-source ingestion** — network shares (filesystem-mounted or SMB), local folders, and single-file uploads, with live per-document progress.
+- **Per-source file-type exclusion** — skip specific extensions (e.g. `epub`, `docx`) per source during scans.
 - **Admin dashboard** — register/test/scan/edit/disable sources, file inventory, run history, answer-engine settings, data cleanup.
-- **Admin auth** — signed session cookies over file-based credentials (SHA-256 + salt).
+- **Admin auth** — signed session cookies over file-based credentials (SHA-256 + salt); the first run prompts you to create the admin account in the browser.
 - **Extraction** — PDF, DOCX, Markdown, and TXT text extraction; deterministic metadata extraction; 1000-char chunks with 200-char overlap.
 
 ---
@@ -49,7 +50,7 @@ src/
   ingestion/              Connectors, extractor, chunker, embedder, orchestrator
   llm/                    LLM providers (local/external), prompts, settings
   models/                 SQLAlchemy models (15+ tables)
-  templates/              search.html, admin.html, login.html
+  templates/              search.html, admin.html, login.html, setup.html
   middleware/             Request ID, logging, error handling
 alembic/                  Schema migrations
 sample_docs/              Sample documents for trying ingestion
@@ -90,7 +91,7 @@ docker compose up -d              # pulls ghcr.io/chitrangad/rag-assistant:lates
 ### 3. Ingest documents
 
 1. Open the **Admin** page → **Add Data Source**.
-2. Pick a **Network Share** (any mounted path — GVFS, UNC, /Volumes) or **Local Folder**.
+2. Pick a **Network Share** (any mounted path — GVFS, UNC, /Volumes) or **Local Folder**. Optionally set **Exclude File Types** to skip extensions (e.g. `epub, docx`).
 3. Click **Test** to verify connectivity, then **Scan** — ingestion runs in the background with a live progress bar.
 4. Ask questions on the query page — you'll get a grounded answer with citations. Optionally switch the answer engine to an external AI API in **Admin → AI Answer Engine**.
 
@@ -107,7 +108,7 @@ docker compose up -d              # pulls ghcr.io/chitrangad/rag-assistant:lates
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /` | Query web UI |
-| `GET /admin`, `GET/POST /admin/login` | Admin UI + login |
+| `GET /admin`, `GET/POST /admin/login`, `POST /admin/setup` | Admin UI + login + first-run account creation |
 | `POST /api/chat/query` | Answer a question: ranked evidence + a synthesised `answer` with `citations` (`top_k` 1–20). Listing questions return `intent: "listing"` + folders |
 | `POST /api/ingest/upload` | Ingest a single file |
 | `POST /api/ingest/local-folder` | Ingest a local folder |
@@ -154,11 +155,11 @@ Answer-engine settings (provider, model path, context, temperature, external API
 
 ## Project Status
 
-**Verified live on 2026-08-17:** 36/36 tests passing; server running on `0.0.0.0:8000`; 59/59 documents from the `omv` network share re-indexed in ~22 s (246 chunks, zero errors); semantic search, catalog listing, live scan progress, and the full admin API confirmed working end-to-end.
+**Verified live on 2026-08-18:** 96/96 tests passing; server running on `0.0.0.0:8000`; 59/59 documents from the `omv` network share re-indexed in ~22 s (246 chunks, zero errors); semantic search, catalog listing, live scan progress, and the full admin API confirmed working end-to-end.
 
-Working features: the admin API (Bucket 4), a local answer engine with natural-language answers + citations (Bucket 3 partial — FR-009 insufficient-evidence enforcement now included), multi-source ingestion, live ingestion progress, catalog listing, Docker deployment + GHCR publishing.
+Working features: the admin API (Bucket 4), a local answer engine with natural-language answers + citations (Bucket 3 partial — FR-009 insufficient-evidence enforcement now included), multi-source ingestion, per-source file-type exclusion, first-run admin account creation, live ingestion progress, catalog listing, Docker deployment + GHCR publishing.
 
-Known gaps: formal confidence scoring / structured citation objects (FR-008), admin metadata enrichment (FR-012), and SMB connector tests. The browser extension (former Bucket 5) has been removed — answer synthesis now happens in-app.
+Known gaps: formal confidence scoring / structured citation objects (FR-008) and admin metadata enrichment (FR-012). The browser extension (former Bucket 5) has been removed — answer synthesis now happens in-app.
 
 ### Deployment options
 

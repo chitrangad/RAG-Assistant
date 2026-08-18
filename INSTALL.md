@@ -246,7 +246,7 @@ Append more `username:hash` lines to add users.
 
 1. Open **Admin** → **Add Data Source**.
 2. Choose **Network Share** — a mounted path (GVFS, UNC, `/Volumes`) or a remote UNC entered as `\\server\share\folder` (reached directly via SMB, no mount required) — or **Local Folder**.
-3. Enter the path; click **Test**, then **Scan**. Ingestion runs in the background with live progress.
+3. Enter the path; optionally set **Exclude File Types** (comma-separated extensions, e.g. `epub, docx`) to skip those files. Click **Test**, then **Scan** — ingestion runs in the background with live progress.
 
 ---
 
