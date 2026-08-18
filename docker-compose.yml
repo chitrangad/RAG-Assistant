@@ -40,6 +40,11 @@ services:
       - HOST=0.0.0.0
       # ChromaDB anonymous telemetry off (local-first privacy)
       - ANONYMIZED_TELEMETRY=False
+      # The embedding model (all-MiniLM-L6-v2) is pre-cached into the image,
+      # so resolve it from the local cache and never hit huggingface.co —
+      # otherwise sentence-transformers does a revision check on every cold
+      # start (and hangs/fails on a truly offline machine).
+      - HF_HUB_OFFLINE=1
     healthcheck:
       test:
         [

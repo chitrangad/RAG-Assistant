@@ -151,6 +151,8 @@ docker compose up -d     # pulls the pre-built image and starts
 - Logs: `docker compose logs -f`
 - Stop: `docker compose down` (data persists in the host data directory)
 
+The embedding model (`all-MiniLM-L6-v2`) is baked into the image and loads from its local cache (`HF_HUB_OFFLINE=1` is set in `docker-compose.yml`), so ingestion and queries never contact Hugging Face.
+
 ### Persistent data
 
 `docker-compose.yml` bind-mounts the host data directory into the container:
