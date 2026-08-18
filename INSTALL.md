@@ -26,6 +26,31 @@ There are **two supported deployment methods**:
 
 ---
 
+## Windows via WSL2
+
+The app runs fine on a Windows laptop through **WSL2** (not WSL1). Pick one of these distros — both ship Python 3.11+ out of the box:
+
+| Distro | Python default | Notes |
+|--------|----------------|-------|
+| Debian 12 (bookworm) | 3.11 | Bare minimum — smallest option that works as-is |
+| Ubuntu 24.04 LTS | 3.12 | What `wsl --install` gives you by default; most supported |
+
+Avoid **Ubuntu 22.04** (ships Python 3.10 — needs a PPA to reach 3.11+) and **Alpine** (musl libc breaks several prebuilt wheels).
+
+```powershell
+wsl --install                 # installs WSL2 + Ubuntu 24.04 by default
+# wsl --install -d Debian     # or, the minimal Debian 12 route
+```
+
+Then follow the normal deployment methods inside WSL:
+
+- **Method A (bare metal)** — needs Python 3.11+ (shipped by the distros above) plus `git` and `curl`. Add `smbclient` for direct UNC-share access: `sudo apt install smbclient`.
+- **Method B (Docker)** — install **Docker Desktop for Windows** with the WSL2 backend and run `docker compose up -d`; the distro itself only needs to run the compose CLI, since the image is self-contained (`python:3.12-slim`).
+
+Budget the same resources as native (~4 GB disk, 8 GB+ RAM). CPU inference works fine in WSL2 — no GPU needed, since the project is CPU-only.
+
+---
+
 ## Method A: Bare metal (`install.sh`)
 
 A single script creates the virtualenv, installs all dependencies (CPU-only PyTorch, llama-cpp-python from a prebuilt wheel, and the app), downloads the answer LLM, and creates the admin account.
