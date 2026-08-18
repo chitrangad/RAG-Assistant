@@ -4,7 +4,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from src.ingestion.connector import SourceConnector, DocumentCandidate
+from src.ingestion.connector import (
+    DocumentCandidate,
+    SourceConnector,
+    normalize_extensions,
+)
 from src.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -15,9 +19,15 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".epub", ".md", ".txt"}
 class LocalFolderConnector(SourceConnector):
     """Discovers documents from a local directory."""
 
-    def __init__(self, folder_path: str, recursive: bool = True):
+    def __init__(
+        self,
+        folder_path: str,
+        recursive: bool = True,
+        exclude_extensions: list[str] | None = None,
+    ):
         self.folder_path = Path(folder_path).expanduser().absolute()
         self.recursive = recursive
+        self.exclude_extensions = normalize_extensions(exclude_extensions)
 
     async def validate(self) -> bool:
         """Check that the folder exists and is readable."""
@@ -36,6 +46,8 @@ class LocalFolderConnector(SourceConnector):
                 continue
             ext = file_path.suffix.lower()
             if ext not in SUPPORTED_EXTENSIONS:
+                continue
+            if ext.lstrip(".") in self.exclude_extensions:
                 continue
 
             stat = file_path.stat()

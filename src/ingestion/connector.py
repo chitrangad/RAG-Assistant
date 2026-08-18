@@ -7,6 +7,22 @@ from pathlib import Path
 from typing import Any
 
 
+def normalize_extensions(extensions: list[str] | None) -> set[str]:
+    """Normalise extension strings to a set of lowercase, dotless names.
+
+    Accepts messy input (``["epub", ".Docx", "  md "]``) and returns a clean
+    set (``{"epub", "docx", "md"}``). Used to filter file types during scans.
+    """
+    if not extensions:
+        return set()
+    result: set[str] = set()
+    for ext in extensions:
+        name = (ext or "").strip().lstrip(".").lower()
+        if name:
+            result.add(name)
+    return result
+
+
 @dataclass
 class DocumentCandidate:
     """A document discovered by a connector, before ingestion."""

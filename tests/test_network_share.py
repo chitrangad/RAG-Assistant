@@ -384,3 +384,47 @@ class TestFilesystemTimeout:
         c = NetworkShareConnector("/mnt/hung", fs_read_timeout=0.1)
         with pytest.raises(TimeoutError):
             await c.read_content("/mnt/hung/file.txt")
+
+
+# ──────────────────────────────────────────────
+# File-type exclusion
+# ──────────────────────────────────────────────
+
+
+class TestExcludeExtensions:
+    async def test_filesystem_excludes_extensions(self, tmp_path):
+        (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4")
+        (tmp_path / "b.txt").write_text("hello")
+        (tmp_path / "book.epub").write_bytes(b"PK\x03\x04")
+
+        c = NetworkShareConnector(
+            str(tmp_path), exclude_extensions=["epub", ".TXT", "  md "]
+        )
+        c.mode = "fs"
+        docs = await c.discover_documents()
+
+        assert {d.file_name for d in docs} == {"a.pdf"}
+
+    async def test_smb_excludes_extensions(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.ingestion.network_share.subprocess.run",
+            TestSmbDiscovery._make_fake_run(),
+        )
+        c = NetworkShareConnector("//nasrv/docs", exclude_extensions=["pdf"])
+        c.mode = "smb"
+        docs = await c.discover_documents()
+
+        # spec.pdf + deep-document.pdf excluded; txt + md remain.
+        assert {d.file_name for d in docs} == {"notes with spaces.txt", "readme.md"}
+
+    async def test_local_folder_excludes_extensions(self, tmp_path):
+        from src.ingestion.local_folder import LocalFolderConnector
+
+        (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4")
+        (tmp_path / "b.txt").write_text("hello")
+        (tmp_path / "book.epub").write_bytes(b"PK\x03\x04")
+
+        c = LocalFolderConnector(str(tmp_path), exclude_extensions=["EPUB"])
+        docs = await c.discover_documents()
+
+        assert {d.file_name for d in docs} == {"a.pdf", "b.txt"}

@@ -590,3 +590,37 @@ async def test_setup_rejects_mismatched_passwords(client, tmp_path, monkeypatch)
     assert r.status_code == 400, r.text
     assert "Passwords do not match" in r.text
     assert not creds.exists()
+
+
+# ──────────────────────────────────────────────
+# File-type exclusion (source config)
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_source_exclude_file_types_roundtrip(client, admin_token):
+    """Exclude-file-types is stored normalised and returned in the response."""
+    _auth(client, admin_token)
+
+    r = await client.post(
+        "/api/admin/sources",
+        json={
+            "name": "excl-src",
+            "source_type": "local_folder",
+            "path": "/tmp/docs",
+            "exclude_file_types": ["epub", ".Docx", "  md "],
+        },
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["exclude_file_types"] == ["docx", "epub", "md"]
+    sid = data["id"]
+
+    # Clearing via an empty list
+    r2 = await client.patch(
+        f"/api/admin/sources/{sid}", json={"exclude_file_types": []}
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["exclude_file_types"] == []
+
+    await client.delete(f"/api/admin/sources/{sid}")

@@ -19,6 +19,7 @@ from src.auth import require_admin
 from src.llm.settings import LLMSettings, load_settings, save_settings
 from src.llm.factory import reset_llm_cache
 from src.llm.downloader import DEFAULT_MODEL_URL, get_downloader
+from src.ingestion.connector import normalize_extensions
 
 logger = get_logger(__name__)
 
@@ -80,6 +81,9 @@ class SourceCreate(BaseModel):
     network_user: str | None = Field(None, description="Network username for authenticated shares")
     network_pass: str | None = Field(None, description="Network password for authenticated shares")
     network_domain: str | None = Field(None, description="Network domain (optional, for Windows/SMB auth)")
+    exclude_file_types: list[str] | None = Field(
+        None, description="File extensions to skip during scans (e.g. ['epub', 'docx'])"
+    )
 
 
 class SourceResponse(BaseModel):
@@ -94,6 +98,7 @@ class SourceResponse(BaseModel):
     owner_email: str | None = None
     network_user: str | None = None
     has_credentials: bool = False
+    exclude_file_types: list[str] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -181,6 +186,7 @@ class SourceUpdate(BaseModel):
     network_user: str | None = None
     network_pass: str | None = None
     network_domain: str | None = None
+    exclude_file_types: list[str] | None = None
 
 
 # ── Helper ───────────────────────────────────────────────────────────
@@ -200,6 +206,7 @@ async def _ds_to_response(ds: DataSource) -> SourceResponse:
         owner_email=ds.owner_email,
         network_user=cd.get("network_user"),
         has_credentials=bool(cd.get("network_user") and cd.get("network_pass")),
+        exclude_file_types=cd.get("exclude_file_types") or [],
         created_at=ds.created_at,
     )
 
@@ -233,6 +240,8 @@ async def create_source(body: SourceCreate):
             cd["network_pass"] = body.network_pass
         if body.network_domain:
             cd["network_domain"] = body.network_domain
+        if body.exclude_file_types:
+            cd["exclude_file_types"] = sorted(normalize_extensions(body.exclude_file_types))
 
         ds = DataSource(
             name=body.name,
@@ -276,6 +285,8 @@ async def update_source(source_id: str, body: SourceUpdate):
             cd["network_pass"] = body.network_pass
         if body.network_domain is not None:
             cd["network_domain"] = body.network_domain
+        if body.exclude_file_types is not None:
+            cd["exclude_file_types"] = sorted(normalize_extensions(body.exclude_file_types))
 
         ds.connection_details = cd if cd else None
         await db.commit()
@@ -385,6 +396,7 @@ async def test_connection(source_id: str):
             username=cd.get("network_user"),
             password=cd.get("network_pass"),
             domain=cd.get("network_domain"),
+            exclude_extensions=cd.get("exclude_file_types"),
         )
 
         # Validate connectivity
@@ -425,6 +437,7 @@ async def _run_scan_background(
     net_user: str | None,
     net_pass: str | None,
     net_domain: str | None,
+    exclude_extensions: list[str] | None,
 ) -> None:
     """Run ingestion for a source in the background, updating live progress."""
     try:
@@ -436,6 +449,7 @@ async def _run_scan_background(
             username=net_user,
             password=net_pass,
             domain=net_domain,
+            exclude_extensions=exclude_extensions,
         )
 
         orchestrator = _get_orchestrator()
@@ -499,6 +513,7 @@ async def scan_source(source_id: str):
         net_user = cd.get("network_user")
         net_pass = cd.get("network_pass")
         net_domain = cd.get("network_domain")
+        exclude_extensions = cd.get("exclude_file_types")
 
         # Reject duplicate scans: at most one in-flight run per source. Without
         # this, two rapid Scan clicks start two concurrent ingestions of the
@@ -529,6 +544,7 @@ async def scan_source(source_id: str):
             username=net_user,
             password=net_pass,
             domain=net_domain,
+            exclude_extensions=exclude_extensions,
         )
         if not await connector.validate():
             ds.last_status = "error: path not accessible"
@@ -548,7 +564,9 @@ async def scan_source(source_id: str):
         run_id = run.id
 
     task = asyncio.create_task(
-        _run_scan_background(source_id, run_id, path, net_user, net_pass, net_domain)
+        _run_scan_background(
+            source_id, run_id, path, net_user, net_pass, net_domain, exclude_extensions
+        )
     )
     _background_tasks[run_id] = task
     task.add_done_callback(lambda _t, rid=run_id: _background_tasks.pop(rid, None))

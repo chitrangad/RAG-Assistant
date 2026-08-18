@@ -427,6 +427,11 @@
           <label>Owner Email (optional)</label>
           <input type="email" id="src-email" placeholder="owner@company.com">
         </div>
+        <div class="form-group" style="max-width:220px">
+          <label>Exclude File Types</label>
+          <input type="text" id="src-exclude" placeholder="e.g. epub, docx">
+          <small style="color:var(--text-subtle);font-size:0.68rem;margin-top:0.15rem">Comma-separated extensions to skip (.pdf, .docx, .epub, .md, .txt)</small>
+        </div>
         <button class="btn-primary" onclick="addSource()">➕ Add Source</button>
         <span class="auth-toggle" onclick="toggleAuth()">🔑 Network Credentials ▾</span>
       </div>
@@ -600,6 +605,7 @@ async function loadSources() {
     sources.forEach(s => {
       let extras = [];
       if (s.network_user) extras.push('🔑 ' + s.network_user);
+      if (s.exclude_file_types && s.exclude_file_types.length) extras.push('🚫 excl: ' + s.exclude_file_types.join(', '));
       const info = extras.length ? '<br><small style="color:var(--text-muted);font-size:0.7rem">' + extras.join(' ') + '</small>' : '';
       html += '<tr>' +
         '<td>' + statusDot(s.last_status) + '</td>' +
@@ -757,6 +763,8 @@ async function addSource() {
     if (netUser) body.network_user = netUser;
     if (netPass) body.network_pass = netPass;
     if (netDomain) body.network_domain = netDomain;
+    const exclude = document.getElementById('src-exclude').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (exclude.length) body.exclude_file_types = exclude;
 
     const r = await fetch('/api/admin/sources', {
       method: 'POST',
@@ -770,6 +778,7 @@ async function addSource() {
     document.getElementById('src-net-user').value = '';
     document.getElementById('src-net-pass').value = '';
     document.getElementById('src-net-domain').value = '';
+    document.getElementById('src-exclude').value = '';
     document.getElementById('auth-section').classList.remove('open');
     loadSources(); loadHealth();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
@@ -797,6 +806,8 @@ async function testNewSource() {
     if (netUser) body.network_user = netUser;
     if (netPass) body.network_pass = netPass;
     if (netDomain) body.network_domain = netDomain;
+    const exclude = document.getElementById('src-exclude').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (exclude.length) body.exclude_file_types = exclude;
 
     const r = await fetch('/api/admin/sources', {
       method: 'POST',
@@ -993,6 +1004,7 @@ function showEditModal(s) {
     '</div>' +
     '<div class="edit-row">' +
       '<div class="form-group" style="max-width:230px"><label>Owner Email</label><input type="email" id="ed-email" value="' + esc(s.owner_email || '') + '"></div>' +
+      '<div class="form-group" style="flex:1"><label>Exclude File Types</label><input type="text" id="ed-exclude" value="' + esc((s.exclude_file_types || []).join(', ')) + '" placeholder="e.g. epub, docx"></div>' +
     '</div>' +
     '<div class="edit-actions">' +
       '<button class="btn-cancel" id="edit-cancel">Cancel</button>' +
@@ -1024,6 +1036,7 @@ async function saveSource() {
   const pass = document.getElementById('ed-net-pass').value.trim();
   if (pass) body.network_pass = pass;
   body.network_domain = document.getElementById('ed-net-domain').value.trim();
+  body.exclude_file_types = document.getElementById('ed-exclude').value.split(',').map(s => s.trim()).filter(Boolean);
 
   try {
     const r = await fetch('/api/admin/sources/' + _editSourceId, {

@@ -36,7 +36,11 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from src.ingestion.connector import SourceConnector, DocumentCandidate
+from src.ingestion.connector import (
+    DocumentCandidate,
+    SourceConnector,
+    normalize_extensions,
+)
 from src.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -109,6 +113,7 @@ class NetworkShareConnector(SourceConnector):
         recursive: bool = True,
         include_patterns: list[str] | None = None,
         exclude_patterns: list[str] | None = None,
+        exclude_extensions: list[str] | None = None,
         username: str | None = None,
         password: str | None = None,
         domain: str | None = None,
@@ -122,6 +127,7 @@ class NetworkShareConnector(SourceConnector):
         self.recursive = recursive
         self.include_patterns = include_patterns
         self.exclude_patterns = exclude_patterns or []
+        self.exclude_extensions = normalize_extensions(exclude_extensions)
         self.username = username
         self.password = password
         self.domain = domain
@@ -347,6 +353,8 @@ class NetworkShareConnector(SourceConnector):
             ext = file_path.suffix.lower()
             if ext not in SUPPORTED_EXTENSIONS:
                 continue
+            if ext.lstrip(".") in self.exclude_extensions:
+                continue
 
             rel = str(file_path.relative_to(self.share_path))
             if self._should_skip(rel):
@@ -463,6 +471,8 @@ class NetworkShareConnector(SourceConnector):
             # Check extension
             ext = os.path.splitext(name)[1].lower()
             if ext not in SUPPORTED_EXTENSIONS:
+                continue
+            if ext.lstrip(".") in self.exclude_extensions:
                 continue
 
             # Build a virtual file path
