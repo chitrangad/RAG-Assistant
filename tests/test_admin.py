@@ -500,3 +500,93 @@ async def test_rescan_replaces_changed_documents(setup_db):
             await db.execute(select(func.count()).select_from(DocumentChunk))
         ).scalar()
         assert count == 3
+
+
+# ──────────────────────────────────────────────
+# First-run admin account creation
+# ──────────────────────────────────────────────
+
+
+def _isolate_credentials(tmp_path, monkeypatch):
+    """Point auth at isolated credential/secret files for first-run tests."""
+    creds = tmp_path / ".credentials"
+    secret = tmp_path / ".session_secret"
+    monkeypatch.setattr("src.auth.CREDENTIALS_FILE", creds)
+    monkeypatch.setattr("src.auth.SESSION_SECRET_FILE", secret)
+    return creds
+
+
+@pytest.mark.asyncio
+async def test_first_run_login_shows_setup(client, tmp_path, monkeypatch):
+    """With no admin account, the login page offers first-run account creation."""
+    _isolate_credentials(tmp_path, monkeypatch)
+
+    r = await client.get("/admin/login")
+    assert r.status_code == 200, r.text
+    assert "Create Account" in r.text
+    assert "First run" in r.text
+
+
+@pytest.mark.asyncio
+async def test_setup_creates_admin_and_logs_in(client, tmp_path, monkeypatch):
+    """POST /admin/setup creates the admin and returns an authenticated session."""
+    creds = _isolate_credentials(tmp_path, monkeypatch)
+
+    r = await client.post(
+        "/admin/setup",
+        data={"username": "admin", "password": "secret123", "confirm": "secret123"},
+    )
+    assert r.status_code == 303, r.text
+    assert r.headers["location"] == "/admin"
+
+    # Credentials file written with the hashed admin line
+    content = creds.read_text()
+    assert content.startswith("admin:sha256$")
+
+    # The session cookie from setup is authenticated
+    r2 = await client.get("/admin")
+    assert r2.status_code == 200, r2.text
+
+
+@pytest.mark.asyncio
+async def test_setup_refuses_when_credentials_exist(client, tmp_path, monkeypatch):
+    """Once an account exists, the setup route cannot create or reset accounts."""
+    creds = _isolate_credentials(tmp_path, monkeypatch)
+    creds.write_text(generate_credential_line("admin", "testpass"))
+
+    r = await client.post(
+        "/admin/setup",
+        data={"username": "hacker", "password": "pw", "confirm": "pw"},
+    )
+    assert r.status_code == 303, r.text
+    assert r.headers["location"] == "/admin/login"
+
+    content = creds.read_text()
+    assert "admin:" in content
+    assert "hacker:" not in content
+
+
+@pytest.mark.asyncio
+async def test_login_page_when_credentials_exist(client, tmp_path, monkeypatch):
+    """With an existing account, the login page shows the normal sign-in form."""
+    creds = _isolate_credentials(tmp_path, monkeypatch)
+    creds.write_text(generate_credential_line("admin", "testpass"))
+
+    r = await client.get("/admin/login")
+    assert r.status_code == 200, r.text
+    assert "Sign In" in r.text
+    assert "Create Account" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_setup_rejects_mismatched_passwords(client, tmp_path, monkeypatch):
+    """A password/confirm mismatch shows the error and creates nothing."""
+    creds = _isolate_credentials(tmp_path, monkeypatch)
+
+    r = await client.post(
+        "/admin/setup",
+        data={"username": "admin", "password": "secret123", "confirm": "different"},
+    )
+    assert r.status_code == 400, r.text
+    assert "Passwords do not match" in r.text
+    assert not creds.exists()

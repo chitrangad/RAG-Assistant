@@ -14,7 +14,13 @@ from src.middleware.request_id import RequestIDMiddleware
 from src.middleware.logging import LoggingMiddleware
 from src.middleware.error_handler import ErrorHandlerMiddleware
 from src.api.router import api_router
-from src.auth import require_admin_page, authenticate_and_login
+from src.auth import (
+    authenticate_and_login,
+    create_initial_admin,
+    create_session_token,
+    credentials_exist,
+    require_admin_page,
+)
 
 logger = get_logger(__name__)
 
@@ -34,6 +40,17 @@ def _read_template(name: str) -> str:
     content = path.read_text(encoding="utf-8")
     globals()[cache_key] = content
     return content
+
+
+def _render_setup(error: str | None = None) -> str:
+    """Render the first-run admin creation page, optionally showing an error."""
+    template = _read_template("setup.html")
+    if error:
+        return template.replace(
+            '<div class="error-msg" id="setup-error" style="display:none"></div>',
+            f'<div class="error-msg" id="setup-error" style="display:block">{error}</div>',
+        )
+    return template
 
 
 @asynccontextmanager
@@ -91,8 +108,52 @@ async def admin_page(request: Request):
 
 @app.get("/admin/login")
 async def admin_login_page(request: Request):
-    """Admin login page."""
+    """Admin login page — or first-run admin creation when no account exists."""
+    if not credentials_exist():
+        return HTMLResponse(content=_render_setup())
     return HTMLResponse(content=_read_template("login.html"))
+
+
+@app.post("/admin/setup")
+async def admin_setup(
+    username: str = Form(...),
+    password: str = Form(...),
+    confirm: str = Form(...),
+):
+    """First-run bootstrap: create the initial admin account.
+
+    Refuses (redirects to login) once any account already exists, so this
+    route cannot be used to reset or add accounts after setup.
+    """
+    if credentials_exist():
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    username = username.strip()
+    error = None
+    if not username or ":" in username:
+        error = "Username is required and cannot contain ':'."
+    elif not password:
+        error = "Password is required."
+    elif password != confirm:
+        error = "Passwords do not match."
+
+    if error is not None:
+        return HTMLResponse(content=_render_setup(error), status_code=400)
+
+    if not create_initial_admin(username, password):
+        # Race: an account was created between the check and now.
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    token = create_session_token(username)
+    response = RedirectResponse(url="/admin", status_code=303)
+    response.set_cookie(
+        key="admin_session",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_ttl_hours * 3600,
+    )
+    return response
 
 
 @app.post("/admin/login")

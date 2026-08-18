@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Admin — RAG Knowledge Assistant</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: #f1f5f9; color: #1e293b; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 2.5rem 2rem; width: 100%; max-width: 380px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  .login-card .logo {
+    text-align: center; font-size: 1.3rem; font-weight: 800;
+    color: #2563eb; margin-bottom: 0.2rem;
+  }
+  .login-card .sub {
+    text-align: center; color: #64748b; font-size: 0.82rem;
+    margin-bottom: 1.75rem;
+  }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label {
+    display: block; font-size: 0.72rem; color: #64748b; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem;
+  }
+  .form-group input {
+    width: 100%; padding: 0.65rem 0.85rem; border-radius: 6px;
+    border: 1px solid #e2e8f0; background: #f8fafc;
+    color: #1e293b; font-size: 0.9rem;
+  }
+  .form-group input:focus { outline: none; border-color: #2563eb; }
+  .btn-login {
+    width: 100%; padding: 0.7rem; border-radius: 6px; border: none;
+    background: #2563eb; color: white; font-weight: 700; font-size: 0.9rem;
+    cursor: pointer; margin-top: 0.5rem; transition: background 0.15s;
+  }
+  .btn-login:hover { background: #1d4ed8; }
+  .error-msg {
+    background: #fef2f2; color: #991b1b; padding: 0.6rem 0.9rem;
+    border-radius: 6px; font-size: 0.8rem; margin-bottom: 1rem;
+    text-align: center; display: none;
+  }
+  .back-link { text-align: center; margin-top: 1rem; }
+  .back-link a { color: #64748b; text-decoration: none; font-size: 0.78rem; }
+  .back-link a:hover { color: #2563eb; }
+</style>
+</head>
+<body>
+<div class="login-card">
+  <div class="logo">RAG Knowledge Assistant</div>
+  <p class="sub">First run — create the admin account</p>
+  <div class="error-msg" id="setup-error" style="display:none"></div>
+  <form method="post" action="/admin/setup">
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autofocus required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required>
+    </div>
+    <div class="form-group">
+      <label for="confirm">Confirm password</label>
+      <input type="password" id="confirm" name="confirm" required>
+    </div>
+    <button type="submit" class="btn-login">Create Account</button>
+  </form>
+  <div class="back-link"><a href="/">← Back to search</a></div>
+</div>
+</body>
+</html>

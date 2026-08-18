@@ -84,7 +84,7 @@ docker compose up -d              # pulls ghcr.io/chitrangad/rag-assistant:lates
 ```
 
 - Query page: **http://127.0.0.1:8000**
-- Admin dashboard: **http://127.0.0.1:8000/admin** (login required)
+- Admin dashboard: **http://127.0.0.1:8000/admin** (on first run you'll be prompted to create the admin account; login afterwards)
 - API docs (Swagger): **http://127.0.0.1:8000/docs**
 
 ### 3. Ingest documents

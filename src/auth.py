@@ -192,3 +192,29 @@ async def authenticate_and_login(username: str, password: str) -> str | None:
 def generate_credential_line(username: str, password: str) -> str:
     """Return a line suitable for the credentials file."""
     return f"{username}:{hash_password(password)}"
+
+
+def credentials_exist() -> bool:
+    """Return True if at least one admin account is configured."""
+    return bool(_load_credentials())
+
+
+def create_initial_admin(username: str, password: str) -> bool:
+    """Create the first admin account (first-run bootstrap).
+
+    Only succeeds when no credentials exist yet, so a later visitor cannot
+    overwrite or add accounts through the setup page. Returns True if the
+    account was created, False if one already exists.
+    """
+    if credentials_exist():
+        return False
+    line = generate_credential_line(username, password)
+    CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CREDENTIALS_FILE, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    try:
+        os.chmod(CREDENTIALS_FILE, 0o600)
+    except OSError:
+        pass
+    logger.info("initial_admin_created", username=username)
+    return True

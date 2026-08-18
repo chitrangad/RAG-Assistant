@@ -147,6 +147,7 @@ docker compose up -d     # pulls the pre-built image and starts
 ```
 
 - Query page: `http://127.0.0.1:8000`
+- Admin dashboard: `http://127.0.0.1:8000/admin` — on first run it asks you to create the admin account (no command-line step needed)
 - Logs: `docker compose logs -f`
 - Stop: `docker compose down` (data persists in the host data directory)
 
@@ -227,7 +228,9 @@ The pre-built image is published to **GitHub Container Registry (GHCR)** — cho
 
 ### Admin credentials
 
-`install.sh` creates the admin account automatically. To do it manually (or add users):
+On **first run with no account configured**, opening the admin page (`/admin`) shows a **Create Account** form instead of the login — use it to create the admin account with no command-line step. This is the normal path for **Docker** deployments, where `install.sh` is not run.
+
+`install.sh` (bare metal) creates the admin account automatically. To do it manually (or add users):
 
 ```bash
 mkdir -p data
@@ -303,7 +306,7 @@ tar xzf rag-backup.tar.gz
 | `Test Provider` fails on local model | Check the model path in Admin → AI Answer Engine and that `llama-cpp-python` installed |
 | `Test Provider` fails on external API | Check base URL, API key, and model name; ensure the endpoint is reachable |
 | Query returns "insufficient evidence" too often | Lower the minimum relevance score in Admin → AI Answer Engine |
-| Admin login fails | Recreate `data/.credentials` with `generate_credential_line` |
+| Admin login fails | If this is a fresh install, open `/admin` to create the account; otherwise recreate `data/.credentials` with `generate_credential_line` |
 | Port in use | Set `PORT` (bare metal: `--port`; Docker: `.env`) |
 | Container can't see a share | Bind-mount the share in `docker-compose.yml`, or enter it as a remote UNC (`\\server\share`) so the app connects via SMB — no mount needed (see Network shares) |
 | Remote UNC share fails to connect | Ensure `smbclient` is installed on the machine running the app (`apt install smbclient` / included in the Docker image); check credentials and that the share allows SMB access |
