@@ -20,6 +20,9 @@ prompt.txt
 # Local docs pack (keep on disk, not in git)
 project_knowledge_assistant_updated_documentation_pack.zip
 
+# Local run notes (machine-specific, keep on disk)
+run_instructions.txt
+
 # Testing
 .pytest_cache/
 .coverage
