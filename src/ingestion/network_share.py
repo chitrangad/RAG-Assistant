@@ -18,6 +18,11 @@ All blocking work (filesystem calls, ``smbclient`` subprocesses) runs in a
 worker thread via ``asyncio.to_thread`` so a slow or unresponsive share never
 blocks the event loop — otherwise one slow scan freezes the whole app.
 
+Filesystem calls are also time-bounded: ``fs_timeout`` bounds discovery/validate
+and ``fs_read_timeout`` bounds per-file reads. If a mounted share hangs, the
+operation raises so the run is marked failed instead of sitting in ``running``
+forever.
+
 SMB traversal is bounded: recursion stops after ``max_depth`` levels or
 ``max_dirs`` visited directories, so a pathological tree (e.g. hundreds of
 nested folders or a link loop) can't hang a scan forever.
@@ -109,6 +114,8 @@ class NetworkShareConnector(SourceConnector):
         domain: str | None = None,
         max_depth: int = 20,
         max_dirs: int = 20000,
+        fs_timeout: float = 300.0,
+        fs_read_timeout: float = 60.0,
     ):
         self.share_path = _normalise_path(share_path)
         self.share_raw = share_path  # Keep original for smbclient
@@ -120,6 +127,11 @@ class NetworkShareConnector(SourceConnector):
         self.domain = domain
         self.max_depth = max(max_depth, 1)
         self.max_dirs = max(max_dirs, 1)
+        # Bound filesystem work so a hung mount fails the scan rather than
+        # hanging the run forever. Discovery/validate walk the whole tree, so
+        # they get the longer timeout; per-file reads get the shorter one.
+        self.fs_timeout = max(fs_timeout, 1.0)
+        self.fs_read_timeout = max(fs_read_timeout, 1.0)
 
         # (host, share_path) when the path is UNC-style; None otherwise.
         self._unc = _parse_unc(share_path)
@@ -238,7 +250,17 @@ class NetworkShareConnector(SourceConnector):
 
     async def _validate_fs(self) -> bool:
         """Filesystem-based validation (for mounted shares), off the loop."""
-        return await asyncio.to_thread(self._validate_fs_sync)
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._validate_fs_sync), timeout=self.fs_timeout
+            )
+        except asyncio.TimeoutError:
+            self.last_error = (
+                f"Timed out after {self.fs_timeout:.0f}s accessing "
+                f"{self.share_path}. The share may be hung or unresponsive."
+            )
+            logger.warning("fs_validate_timeout", path=str(self.share_path))
+            return False
 
     def _validate_fs_sync(self) -> bool:
         """Synchronous filesystem validation (runs in a worker thread)."""
@@ -303,7 +325,15 @@ class NetworkShareConnector(SourceConnector):
 
     async def _discover_fs(self) -> list[DocumentCandidate]:
         """Filesystem-based discovery (for mounted shares), off the loop."""
-        return await asyncio.to_thread(self._discover_fs_sync)
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._discover_fs_sync), timeout=self.fs_timeout
+            )
+        except asyncio.TimeoutError:
+            raise TimeoutError(
+                f"Filesystem scan timed out after {self.fs_timeout:.0f}s on "
+                f"{self.share_path}. The share may be hung or unresponsive."
+            ) from None
 
     def _discover_fs_sync(self) -> list[DocumentCandidate]:
         """Synchronous filesystem discovery (runs in a worker thread)."""
@@ -496,11 +526,20 @@ class NetworkShareConnector(SourceConnector):
             return await self._read_smb(file_path)
 
         # Filesystem mode (off the event loop so a hung mount can't freeze
-        # the app; an OSError surfaces to the orchestrator per document).
+        # the app; a timeout or OSError surfaces to the orchestrator per
+        # document so the run fails instead of hanging).
         fp = Path(file_path)
         if not fp.is_absolute():
             fp = self.share_path / fp
-        return await asyncio.to_thread(fp.read_bytes)
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(fp.read_bytes), timeout=self.fs_read_timeout
+            )
+        except asyncio.TimeoutError:
+            raise TimeoutError(
+                f"Timed out after {self.fs_read_timeout:.0f}s reading "
+                f"{fp}. The share may be hung or unresponsive."
+            ) from None
 
     async def _read_smb(self, smb_url: str) -> bytes:
         """Read a file via smbclient get."""

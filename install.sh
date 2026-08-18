@@ -117,4 +117,4 @@ log "Install complete."
 printf '\nStart the server:\n'
 printf '  %s -m uvicorn src.main:app --host 0.0.0.0 --port %s\n\n' "$PY" "$PORT"
 printf 'Then open http://127.0.0.1:%s  (admin: http://127.0.0.1:%s/admin)\n' "$PORT" "$PORT"
-printf 'See INSTALL.md §4 for a systemd service unit to keep it running.\n'
+printf 'See INSTALL.md (Method A → Keep it running) for a system-level systemd service unit.\n'

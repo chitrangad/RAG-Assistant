@@ -1,5 +1,6 @@
 """Tests for the network share connector — UNC parsing, mode selection, SMB discovery."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -334,3 +335,52 @@ class TestFilesystemDiscovery:
         c.mode = "fs"
         content = await c.read_content(str(tmp_path / "hello.txt"))
         assert content == b"hello world"
+
+
+# ──────────────────────────────────────────────
+# Filesystem timeouts (hung mounts fail instead of hanging)
+# ──────────────────────────────────────────────
+
+
+class TestFilesystemTimeout:
+    async def test_validate_times_out_and_returns_false(self, monkeypatch):
+        """A hung mount during validation returns False instead of hanging."""
+        import time
+
+        def slow():
+            time.sleep(1.0)
+            return True
+
+        c = NetworkShareConnector("/mnt/hung", fs_timeout=0.1)
+        monkeypatch.setattr(c, "_validate_fs_sync", slow)
+
+        assert await c.validate() is False
+        assert c.last_error and "Timed out" in c.last_error
+
+    async def test_discovery_times_out_and_raises(self, monkeypatch):
+        """A hung mount during discovery raises so the run can be marked failed."""
+        import time
+
+        def slow():
+            time.sleep(1.0)
+            return []
+
+        c = NetworkShareConnector("/mnt/hung", fs_timeout=0.1)
+        monkeypatch.setattr(c, "_discover_fs_sync", slow)
+
+        with pytest.raises(TimeoutError):
+            await c.discover_documents()
+
+    async def test_read_times_out_and_raises(self, monkeypatch):
+        """A hung mount during a per-file read raises TimeoutError."""
+        import time
+
+        def slow_read(self):
+            time.sleep(1.0)
+            return b""
+
+        monkeypatch.setattr(Path, "read_bytes", slow_read)
+
+        c = NetworkShareConnector("/mnt/hung", fs_read_timeout=0.1)
+        with pytest.raises(TimeoutError):
+            await c.read_content("/mnt/hung/file.txt")

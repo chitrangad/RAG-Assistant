@@ -204,6 +204,11 @@
   .run-status.running { background: #dbeafe; color: #1d4ed8; }
   .run-status.pending { background: var(--bg); color: var(--text-muted); }
 
+  /* Per-run error details */
+  .run-errors { font-size: 0.72rem; color: #991b1b; background: var(--danger-bg); border: 1px solid #fecaca; border-radius: 5px; padding: 0.5rem 0.7rem; }
+  .run-errors ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+  .run-errors li { margin: 0.15rem 0; word-break: break-word; }
+
   /* Live ingestion progress */
   .progress-wrap { display: flex; align-items: center; gap: 0.4rem; }
   .progress-track {
@@ -541,9 +546,14 @@ function startScanPolling(runId) {
       const run = await r.json();
       showScanProgress(run);
       loadRuns();
-      if (run.status === 'completed' || run.status === 'completed_with_errors') {
+      if (run.status === 'completed') {
         stopScanPolling();
         showToast('Scan complete: ' + run.documents_indexed + ' of ' + run.documents_discovered + ' documents indexed');
+        loadSources(); loadHealth();
+      } else if (run.status === 'completed_with_errors') {
+        stopScanPolling();
+        const errCount = (run.errors || '').split('\n').filter(Boolean).length;
+        showToast('Scan finished with ' + errCount + ' error(s) — see run details below.', 'error');
         loadSources(); loadHealth();
       } else if (run.status === 'failed') {
         stopScanPolling();
@@ -700,8 +710,20 @@ async function loadRuns() {
         '<td>' + run.documents_indexed + '</td>' +
         '<td>' + progressCell + '</td>' +
         '<td>' + runStatusBadge(run.status) + '</td>' +
-        '<td><button class="btn-sm danger" onclick="deleteRun(\'' + run.id + '\', \'' + run.source_id + '\')" ' + (running ? 'disabled' : '') + '>Del</button></td>' +
+        '<td><button class="btn-sm danger" onclick="deleteRun(\'' + run.id + '\', \'' + run.source_id + '\')">Del</button></td>' +
       '</tr>';
+      if (run.errors) {
+        const errLines = run.errors.split('\n').filter(Boolean);
+        if (errLines.length) {
+          const items = errLines.map(line => {
+            const idx = line.indexOf(': ');
+            const name = idx === -1 ? line : line.slice(0, idx);
+            const reason = idx === -1 ? '' : line.slice(idx + 2);
+            return '<li><strong>' + escJs(name) + '</strong>' + (reason ? ' — ' + escJs(reason) : '') + '</li>';
+          }).join('');
+          html += '<tr><td colspan="8"><div class="run-errors"><strong>⚠ ' + errLines.length + ' error(s)</strong><ul>' + items + '</ul></div></td></tr>';
+        }
+      }
     });
     html += '</tbody></table>';
     area.innerHTML = html;
@@ -815,6 +837,14 @@ async function scanSource(id) {
   showToast('Starting scan...', 'info');
   try {
     const r = await fetch('/api/admin/sources/' + id + '/scan', { method: 'POST' });
+    if (r.status === 409) {
+      // A scan is already in flight for this source — resume its progress.
+      const d = await r.json();
+      showToast('A scan is already running for this source.', 'error');
+      if (d.run_id) startScanPolling(d.run_id);
+      loadRuns();
+      return;
+    }
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail);
     showScanProgress({ status: 'running', documents_discovered: 0, documents_indexed: 0 });
@@ -860,7 +890,7 @@ async function clearAllData() {
 
 async function deleteRun(runId, sourceId) {
   showConfirm('Delete this ingestion run?',
-    'This will delete run <strong>' + runId + '</strong> and all ingested data for source <strong>' + sourceId + '</strong>. This cannot be undone.',
+    'This will cancel the scan if it is still running, and delete run <strong>' + runId + '</strong> and all ingested data for source <strong>' + sourceId + '</strong>. This cannot be undone.',
     null,
     async () => {
       try {

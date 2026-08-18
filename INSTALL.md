@@ -63,14 +63,19 @@ Environment overrides: `PYTHON`, `VENV_DIR`, `DATA_DIR`, `ADMIN_USER`, `ADMIN_PA
 
 ### Keep it running (systemd)
 
+Register a **system-level** unit (runs at boot and survives logout — unlike a
+`systemctl --user` service, which needs a lingering login session to do the same):
+
 ```ini
-# ~/.config/systemd/user/rag-assistant.service
+# /etc/systemd/system/rag-assistant.service
 [Unit]
 Description=RAG Knowledge Assistant
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+User=USER                      # ← account that owns data/ (not root)
 WorkingDirectory=/home/USER/RAG-Assistant   # ← where data/ lives
 ExecStart=/home/USER/RAG-Assistant/.venv/bin/python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
@@ -78,14 +83,17 @@ RestartSec=3
 Environment=LOG_LEVEL=INFO
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 ```
 
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now rag-assistant
-systemctl --user status rag-assistant
+sudo systemctl daemon-reload
+sudo systemctl enable --now rag-assistant
+sudo systemctl status rag-assistant
 ```
+
+> The `User=` account must own the `data/` directory so the service can read
+> and write it. Logs: `journalctl -u rag-assistant -f`.
 
 ### Manual install (reference)
 

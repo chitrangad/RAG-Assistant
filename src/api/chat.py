@@ -10,8 +10,10 @@ from src.ingestion.chroma_store import ChromaVectorStore
 from src.llm.factory import get_llm
 from src.llm.settings import load_settings
 from src.llm.prompts import (
+    ENUMERATION_SYSTEM_PROMPT,
     INSUFFICIENT_EVIDENCE_ANSWER,
     SYSTEM_PROMPT,
+    build_enumeration_prompt,
     build_grounding_prompt,
 )
 from src.logging_config import get_logger
@@ -126,6 +128,34 @@ _LISTING_PATTERNS = [
 _NON_LISTING_WORDS = re.compile(
     r"\b(about|related|mention|contain|pertaining|regarding|for|with)\b"
 )
+
+# ── Count / enumeration intent (exact count & complete lists) ───────────
+
+# These questions need ALL matching items, not just the top few chunks, so the
+# answer can be exact instead of a vague "several books like ...".
+_ENUMERATION_PATTERNS = [
+    r"\bhow many\b",
+    r"\bcount\b",
+    r"\bnumber of\b",
+    r"\btotal\b",
+    r"\benumerate\b",
+    r"\blist\s+(?:all|every|each)\b",
+    r"\b(?:all|every|each)\s+(?:the\s+)?(?:books?|reports?|docs?|documents?|files?|items?|projects?|requirements?)\b",
+]
+
+# How many chunks to retrieve for enumeration questions (Chroma returns all of
+# them ranked; we compact down to one snippet per document afterwards).
+_ENUMERATION_RETRIEVAL_K = 200
+# Max distinct documents fed to the model (keeps context under local n_ctx).
+_ENUMERATION_MAX_EVIDENCE = 25
+# Max chars of snippet per document in enumeration evidence.
+_ENUMERATION_SNIPPET_CHARS = 400
+
+
+def _is_enumeration_query(question: str) -> bool:
+    """True if the question asks for an exact count or a complete list."""
+    q = question.lower().strip()
+    return any(re.search(p, q) for p in _ENUMERATION_PATTERNS)
 
 
 def _is_listing_query(question: str) -> bool:
@@ -270,6 +300,12 @@ async def query_chat(request: QueryRequest):
             detail="No documents indexed. Upload or ingest documents first.",
         )
 
+    # Count / enumeration questions retrieve far beyond the default top-k so
+    # the evidence contains every matching item and the answer can be exact
+    # ("5 books: A, B, ...") instead of vague.
+    enumeration = _is_enumeration_query(request.question)
+    n_results = min(chunk_count, _ENUMERATION_RETRIEVAL_K) if enumeration else request.top_k
+
     # Embed the question
     try:
         query_embedding = await embedder.embed_single(request.question)
@@ -281,7 +317,7 @@ async def query_chat(request: QueryRequest):
     try:
         raw = chroma_store.query(
             query_embedding=query_embedding,
-            n_results=request.top_k,
+            n_results=n_results,
         )
     except Exception as e:
         logger.error("chroma_query_failed", error=str(e))
@@ -361,27 +397,55 @@ async def query_chat(request: QueryRequest):
     else:
         try:
             provider = get_llm()
-            evidence = [
-                {
-                    "document_name": r.document_name,
-                    "file_path": r.file_path,
-                    "chunk_content": r.chunk_content,
-                }
-                for r in results
-            ]
-            prompt = build_grounding_prompt(request.question, evidence)
+            if enumeration:
+                # Compact broad evidence to one snippet per document (title =
+                # file name) so the model can count distinct items exactly
+                # without overflowing the local model's context window.
+                best_by_doc: dict[str, EvidenceChunk] = {}
+                for r in results:
+                    existing = best_by_doc.get(r.document_id)
+                    if existing is None or r.relevance_score > existing.relevance_score:
+                        best_by_doc[r.document_id] = r
+                docs = sorted(
+                    best_by_doc.values(), key=lambda r: -r.relevance_score
+                )[:_ENUMERATION_MAX_EVIDENCE]
+                evidence = [
+                    {
+                        "document_name": d.document_name,
+                        "file_path": d.file_path,
+                        "chunk_content": d.chunk_content[:_ENUMERATION_SNIPPET_CHARS],
+                    }
+                    for d in docs
+                ]
+                prompt = build_enumeration_prompt(request.question, evidence)
+                system_prompt = ENUMERATION_SYSTEM_PROMPT
+                # Lists are longer than the default 2-3 sentence answers.
+                max_tokens = max(llm_settings.max_tokens, 512)
+            else:
+                evidence = [
+                    {
+                        "document_name": r.document_name,
+                        "file_path": r.file_path,
+                        "chunk_content": r.chunk_content,
+                    }
+                    for r in results
+                ]
+                prompt = build_grounding_prompt(request.question, evidence)
+                system_prompt = SYSTEM_PROMPT
+                max_tokens = llm_settings.max_tokens
             answer = await provider.generate(
                 prompt,
-                system=SYSTEM_PROMPT,
-                max_tokens=llm_settings.max_tokens,
+                system=system_prompt,
+                max_tokens=max_tokens,
                 temperature=llm_settings.temperature,
             )
-            citations = [r.document_name for r in results]
+            citations = [e["document_name"] for e in evidence]
             logger.info(
                 "answer_synthesized",
                 question=request.question[:80],
                 provider=llm_settings.provider,
                 citations=len(citations),
+                enumeration=enumeration,
             )
         except Exception as e:
             # Provider unavailable (model missing, no API key, offline, etc.).

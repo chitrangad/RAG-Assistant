@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -412,8 +413,9 @@ async def test_connection(source_id: str):
 # ── Ingestion triggers ───────────────────────────────────────────────
 
 
-# Background scan tasks are held here so the event loop doesn't GC them.
-_background_tasks: set[asyncio.Task] = set()
+# Background scan tasks keyed by run_id, so a running scan can be cancelled
+# when its run is deleted (e.g. a hung duplicate scan).
+_background_tasks: dict[str, asyncio.Task] = {}
 
 
 async def _run_scan_background(
@@ -498,6 +500,26 @@ async def scan_source(source_id: str):
         net_pass = cd.get("network_pass")
         net_domain = cd.get("network_domain")
 
+        # Reject duplicate scans: at most one in-flight run per source. Without
+        # this, two rapid Scan clicks start two concurrent ingestions of the
+        # same files (duplicate documents + contention). Return the existing
+        # run id so the client can resume showing its live progress instead.
+        in_flight = await db.execute(
+            select(IngestionRun).where(
+                IngestionRun.source_id == source_id,
+                IngestionRun.status.in_(["running", "pending"]),
+            )
+        )
+        existing_run = in_flight.scalar_one_or_none()
+        if existing_run is not None:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "detail": "A scan is already running for this source.",
+                    "run_id": existing_run.id,
+                },
+            )
+
         # Quick connectivity check (fast fail for bad paths)
         from src.ingestion.network_share import NetworkShareConnector
 
@@ -528,8 +550,8 @@ async def scan_source(source_id: str):
     task = asyncio.create_task(
         _run_scan_background(source_id, run_id, path, net_user, net_pass, net_domain)
     )
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    _background_tasks[run_id] = task
+    task.add_done_callback(lambda _t, rid=run_id: _background_tasks.pop(rid, None))
 
     return {
         "status": "started",
@@ -737,6 +759,12 @@ async def delete_run(run_id: str):
 
         source_id = run.source_id
         run_status = run.status
+
+        # Cancel any in-flight background scan for this run so it stops writing
+        # (this is how a hung/duplicate scan is cleared from the console).
+        task = _background_tasks.pop(run_id, None)
+        if task is not None and not task.done():
+            task.cancel()
 
         # Find all documents linked to this source
         from src.models.source import SourceDocument

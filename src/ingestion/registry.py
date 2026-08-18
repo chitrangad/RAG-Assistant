@@ -28,16 +28,33 @@ class DocumentRegistry:
         self.db = db
 
     async def register_document(
-        self, candidate: DocumentCandidate, source_id: str | None = None
-    ) -> Document:
-        """Register a new document or return existing one (by path + hash)."""
+        self,
+        candidate: DocumentCandidate,
+        source_id: str | None = None,
+        content_hash: str | None = None,
+    ) -> tuple[Document, str]:
+        """Register a document or return the existing one (by path + hash).
+
+        Returns ``(doc, action)`` where action is one of:
+          - ``"new"``: a brand-new document was created (must be indexed).
+          - ``"updated"``: an existing document changed (old chunks must be
+            replaced before re-indexing).
+          - ``"unchanged"``: an existing document has identical content, so
+            the caller should skip it (incremental scan merge).
+        """
         # Check for existing document by path
         result = await self.db.execute(
             select(Document).where(Document.file_path == candidate.file_path)
         )
         existing = result.scalar_one_or_none()
-        if existing:
-            return existing
+        if existing is not None:
+            if content_hash and existing.content_hash == content_hash:
+                return existing, "unchanged"
+            existing.content_hash = content_hash
+            existing.file_size_bytes = candidate.file_size_bytes
+            existing.last_modified = candidate.last_modified
+            await self._link_to_source(existing.id, source_id)
+            return existing, "updated"
 
         doc = Document(
             file_name=candidate.file_name,
@@ -45,20 +62,39 @@ class DocumentRegistry:
             file_type=candidate.file_type,
             file_size_bytes=candidate.file_size_bytes,
             last_modified=candidate.last_modified,
+            content_hash=content_hash,
         )
         self.db.add(doc)
         await self.db.flush()
-
-        # Link to source if provided
-        if source_id:
-            source_doc = SourceDocument(
-                source_id=source_id,
-                document_id=doc.id,
-            )
-            self.db.add(source_doc)
+        await self._link_to_source(doc.id, source_id)
 
         logger.info("document_registered", doc_id=doc.id, file_name=doc.file_name)
-        return doc
+        return doc, "new"
+
+    async def _link_to_source(
+        self, document_id: str, source_id: str | None
+    ) -> None:
+        """Link a document to a source if the link doesn't already exist."""
+        if not source_id:
+            return
+        result = await self.db.execute(
+            select(SourceDocument).where(
+                SourceDocument.source_id == source_id,
+                SourceDocument.document_id == document_id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            self.db.add(
+                SourceDocument(source_id=source_id, document_id=document_id)
+            )
+
+    async def delete_chunks(self, document_id: str) -> None:
+        """Delete a document's stored chunks (before re-indexing changed content)."""
+        await self.db.execute(
+            DocumentChunk.__table__.delete().where(
+                DocumentChunk.document_id == document_id
+            )
+        )
 
     async def save_chunks(
         self,

@@ -1,5 +1,6 @@
 """Ingestion orchestrator — coordinates the full ingestion pipeline."""
 
+import hashlib
 import uuid
 from datetime import datetime
 
@@ -210,13 +211,28 @@ class IngestionOrchestrator:
             logger.warning("empty_document", file=candidate.file_name)
             return
 
-        # 3. Extract metadata
+        # 3. Hash content so re-scans can detect unchanged/changed documents.
+        content_hash = hashlib.sha256(content).hexdigest()
+
+        # 4. Extract metadata
         metadata = self.metadata_extractor.extract(raw_text)
 
-        # 4. Register document in catalog
-        doc = await registry.register_document(candidate, source_id)
+        # 5. Register document in catalog (dedupes by path + content hash so an
+        # incremental re-scan merges instead of duplicating).
+        doc, action = await registry.register_document(
+            candidate, source_id, content_hash
+        )
+        if action == "unchanged":
+            logger.info("document_unchanged", doc_id=doc.id, file=candidate.file_name)
+            return
 
-        # 5. Link to projects based on metadata
+        # If the document changed, remove its old chunks first so re-indexing
+        # replaces them instead of appending duplicates.
+        if action == "updated":
+            self.chroma_store.delete_by_document(doc.id)
+            await registry.delete_chunks(doc.id)
+
+        # 6. Link to projects based on metadata
         for project_name in metadata.get("project_names", []):
             project = await registry.find_or_create_project(project_name)
             await registry.link_document_to_project(project.id, doc.id)

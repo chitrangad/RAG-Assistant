@@ -164,3 +164,106 @@ async def test_listing_with_topic_stays_semantic(client, setup_db, monkeypatch):
     )
     assert r.status_code == 200, r.text
     assert r.json()["intent"] == "semantic"
+
+
+# ── Count / enumeration queries (exact counts & complete lists) ──────
+
+
+def test_is_enumeration_query():
+    """Count/list questions are detected; plain lookups are not."""
+    from src.api.chat import _is_enumeration_query
+
+    enumeration = [
+        "How many books did Agatha Christie write?",
+        "Count the books by Isaac Asimov",
+        "List all books written by H.G. Wells",
+        "What is the total number of reports?",
+        "Enumerate every document in the Q1 folder",
+    ]
+    non_enumeration = [
+        "What did Asimov write about robots?",
+        "Who is the author of this book?",
+        "Summarize the meeting notes",
+    ]
+    for q in enumeration:
+        assert _is_enumeration_query(q), q
+    for q in non_enumeration:
+        assert not _is_enumeration_query(q), q
+
+
+@pytest.mark.asyncio
+async def test_enumeration_query_retrieves_exhaustively(client, setup_db, monkeypatch):
+    """Count questions fetch far beyond top-k and feed deduped evidence.
+
+    The model gets one compact entry per distinct document so it can state an
+    exact count / full list instead of a vague "several books".
+    """
+    await _seed_docs({"/share/lit": 1})
+    captured = {}
+
+    class _FakeEmbedder:
+        async def embed_single(self, text):
+            return [0.1] * 8
+
+    class _FakeChroma:
+        def count(self):
+            return 250
+
+        def query(self, query_embedding, n_results=10, where=None):
+            captured["n_results"] = n_results
+            # 4 chunks from 2 distinct books (author mentions spread across chunks)
+            return {
+                "ids": [["c1", "c2", "c3", "c4"]],
+                "documents": [
+                    [
+                        "Foundation by Isaac Asimov ...",
+                        "Foundation by Isaac Asimov (part 2)",
+                        "Pebble in the Sky by Isaac Asimov ...",
+                        "Pebble in the Sky by Isaac Asimov (part 2)",
+                    ]
+                ],
+                "metadatas": [
+                    [
+                        {"document_id": "d1", "file_name": "foundation.txt", "file_type": "txt"},
+                        {"document_id": "d1", "file_name": "foundation.txt", "file_type": "txt"},
+                        {"document_id": "d2", "file_name": "pebble.txt", "file_type": "txt"},
+                        {"document_id": "d2", "file_name": "pebble.txt", "file_type": "txt"},
+                    ]
+                ],
+                "distances": [[0.1, 0.15, 0.2, 0.25]],
+            }
+
+    class _FakeLLM:
+        async def generate(self, prompt, system, max_tokens, temperature):
+            captured["system"] = system
+            captured["max_tokens"] = max_tokens
+            return "2 books: Foundation, Pebble in the Sky"
+
+    def _spy_enumeration_prompt(question, evidence):
+        captured["evidence_docs"] = [e["document_name"] for e in evidence]
+        return "ENUM PROMPT"
+
+    monkeypatch.setattr("src.api.chat._get_embedder", lambda: _FakeEmbedder())
+    monkeypatch.setattr("src.api.chat._get_chroma_store", lambda: _FakeChroma())
+    monkeypatch.setattr("src.api.chat.get_llm", lambda: _FakeLLM())
+    monkeypatch.setattr(
+        "src.api.chat.build_enumeration_prompt", _spy_enumeration_prompt
+    )
+
+    r = await client.post(
+        "/api/chat/query",
+        json={"question": "How many books did Isaac Asimov write? List their titles"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+
+    # 1) Broad retrieval: all 250 chunks requested (capped at the retrieval K).
+    assert captured["n_results"] == 200  # min(chunk_count=250, cap=200)
+    assert data["intent"] == "semantic"
+    # 2) Evidence deduped per document: 2 distinct books, not 4 chunks.
+    assert sorted(captured["evidence_docs"]) == ["foundation.txt", "pebble.txt"]
+    # 3) Enumeration prompt + headroom for long lists.
+    assert data["answer"] == "2 books: Foundation, Pebble in the Sky"
+    assert captured["max_tokens"] >= 512
+    # 4) Citations are the distinct documents.
+    assert sorted(data["citations"]) == ["foundation.txt", "pebble.txt"]
