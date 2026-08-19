@@ -222,6 +222,7 @@ The pre-built image is published to **GitHub Container Registry (GHCR)** — cho
 
 - Workflow: `.github/workflows/docker-publish.yml` runs the test suite, builds, and pushes on every push to `main` and on `v*` tags.
 - Tags: `latest` (main), `vX.Y.Z` (semver), `sha-<short>` (every build).
+- **Single `linux/amd64` manifest:** the image is pushed without BuildKit provenance/SBOM attestations. An OCI index carrying those attestations is garbage-collected by GHCR (tags turn into dangling "manifest not found" pulls), so the workflow publishes a plain manifest instead. On Apple Silicon / ARM hosts, Docker pulls that manifest and runs it under x86 emulation.
 - **GHCR visibility:** packages are private by default after the first CI push. For unauthenticated `docker compose up -d` pulls, open the package settings — `github.com/users/chitrangad/packages/container/package/rag-assistant` → **Package settings** → *Change visibility* → **Public**. (Or keep it private and `docker login ghcr.io` with a `read:packages` token.)
 
 ---

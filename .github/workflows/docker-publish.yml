@@ -78,5 +78,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Push a plain single-platform manifest instead of an OCI index
+          # carrying a provenance attestation. GHCR garbage-collects the child
+          # manifests of that index, leaving the tags dangling and breaking
+          # `docker pull` with "manifest not found" (and the package page shows
+          # `unknown/unknown` attestation entries). A plain amd64 manifest also
+          # lets Apple Silicon / ARM hosts pull and run it via emulation.
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
