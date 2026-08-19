@@ -1,18 +1,15 @@
 # ── Publish the pre-built Docker image to GitHub Container Registry ──
-# On every push to main (and on v* tags), runs the test suite, then
+# On every push to main, runs the test suite, then
 # builds the image and publishes it to:
 #     ghcr.io/chitrangad/rag-assistant
 # Tags published:
-#   - latest        (main branch)
-#   - vX.Y.Z        (semver tags, e.g. v0.1.0 → 0.1.0)
-#   - sha-<short>   (every build)
+#   - latest        (rebuilt on every push to main)
 
 name: Build & Publish Docker Image
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -67,9 +64,7 @@ jobs:
         with:
           images: ghcr.io/chitrangad/rag-assistant
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=sha
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v6

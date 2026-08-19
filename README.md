@@ -168,4 +168,4 @@ Known gaps: formal confidence scoring / structured citation objects (FR-008) and
 | Bare metal | Dev / single laptop | `pip install -e ".[dev]"` then `uvicorn src.main:app` (INSTALL.md §4) |
 | systemd | Always-on laptop/server | System service (INSTALL.md §A) |
 | Docker (local build) | Any machine with Docker | `docker compose up -d --build` (INSTALL.md §7) |
-| Docker (pre-built image) | No-build deployments | `docker compose up -d` → pulls `ghcr.io/chitrangad/rag-assistant:latest` (INSTALL.md §7.4; image published by GitHub Actions on `main` and `v*` tags) |
+| Docker (pre-built image) | No-build deployments | `docker compose up -d` → pulls `ghcr.io/chitrangad/rag-assistant:latest` (INSTALL.md §7.4; image published by GitHub Actions on every push to `main`) |
